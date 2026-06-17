@@ -286,28 +286,119 @@ for the 5 coefficients $(a_i,\dots,e_i)$.  The first-order coefficients give
 Similarly, the second-order coefficients yield $H_{\xi\xi},H_{\xi\eta},H_{\eta\eta}$.
 
 %% -------------------------------------------------------------------------
-\subsection{Assembly and solve}
+\subsection{Solve in the principal curvature frame}
+\label{sec:pc-frame-solve}
+
+An alternative, physically transparent parameterisation replaces the arbitrary
+fit frame $(v_1,v_2)$ with the \emph{principal curvature frame}
+$(\vv{e}_1^{\rm pc},\vv{e}_2^{\rm pc})$ from Section~\ref{sec:pc-frame}.
+The DOF expansion becomes
+\begin{equation}
+  \Nb = p\,(\vv{e}_1^{\rm pc}\tp\vv{e}_1^{\rm pc})
+      + q\,(\vv{e}_2^{\rm pc}\tp\vv{e}_2^{\rm pc})
+      + r\,(\vv{e}_1^{\rm pc}\tp\vv{e}_2^{\rm pc}
+           +\vv{e}_2^{\rm pc}\tp\vv{e}_1^{\rm pc}),
+  \label{eq:dofs-pc}
+\end{equation}
+so that $p\approx\sigma_1 t$ and $q\approx\sigma_2 t$ \emph{directly} on
+axisymmetric surfaces (where symmetry forces $r=0$).  On a general surface
+$r\ne 0$ and the principal stresses still require diagonalising
+$\bigl[\begin{smallmatrix}p&r\\r&q\end{smallmatrix}\bigr]$.  The final
+$\sigma_1,\sigma_2$ values are \textbf{identical} to those obtained with any
+other tangent basis, because eigenvalues of $\Nb$ are frame-independent.
+
+The shear component $r$ quantifies the \emph{alignment} between the stress and
+curvature axes: $|r|/(|p|+|q|)\approx 1$--$2\%$ on the sphere and spheroid
+(where axisymmetry forces near-coincidence) and becomes non-trivial on
+general closed surfaces.
+
+Note: BFS sign propagation of $\vv{e}_1^{\rm pc}$ (Section~\ref{sec:sign})
+has unavoidable singularities at umbilic points, which locally perturb the
+GFDM stencils built from $(\vv{e}_1^{\rm pc},\vv{e}_2^{\rm pc})$.  For
+totally umbilic surfaces (e.g.\ the sphere) this is severe; for surfaces with
+only isolated umbilic points (spheroid, capsule, real meshes) the effect is
+localised to $\le 3$ vertices.
+
+%% -------------------------------------------------------------------------
+\subsection{Assembly: a square system}
+\label{sec:assembly}
 
 Substituting~\eqref{eq:dofs} into~\eqref{eq:divs-ambient} and
-\eqref{eq:equil} yields a sparse linear system $L\,\vv{s}=\vv{b}$ of size
-$3n\times 3n$:
+\eqref{eq:equil} yields, at each vertex $i$, three scalar equations —
+one for each ambient Cartesian component of the vector
+equilibrium~\eqref{eq:equil}.  With $n$ vertices and 3 DOFs per vertex,
+the global system is \emph{square}:
 \begin{equation}
-  L\,\vv{s} + \vv{b} = \vv{0}, \qquad
-  \vv{b}^{(i)} = -\Delta p\,\nn^{(i)}, \qquad
+  L\,\vv{s} = \vv{b}, \qquad
+  L\in\mathbb{R}^{3n\times 3n}, \quad
+  \vv{b}^{(i)} = -\Delta p\,\nn^{(i)}, \quad
   \vv{s}^{(i)} = (p_i,q_i,r_i).
   \label{eq:system}
 \end{equation}
-Because the system is \emph{rank-deficient} on a closed surface (null modes),
-we solve the Tikhonov-regularised normal equations:
+At first glance this looks fully determined: 3 equations per vertex
+(1 normal + 2 tangential) for 3 unknowns per vertex $(p,q,r)$.
+
+%% -------------------------------------------------------------------------
+\subsection{Static indeterminacy and null modes on closed surfaces}
+\label{sec:null-modes}
+
+Despite the $3n\times 3n$ size, the system matrix $L$ is
+\textbf{rank-deficient} on a closed surface.  This is because there
+exists a finite-dimensional space of \emph{self-equilibrating stress
+states} — non-zero solutions $\vv{s}_{\rm null}$ that satisfy
+$L\,\vv{s}_{\rm null}=\vv{0}$ even in the absence of any external load.
+
+Physically, these null modes are internal stress distributions that
+exactly balance themselves around the closed surface without requiring any
+pressure to sustain them.  Because the surface has no boundary edges to
+anchor a unique solution, any valid stress field $\vv{s}^*$ can be augmented
+by any amount of $\vv{s}_{\rm null}$ without violating equilibrium:
+\[
+  L(\vv{s}^*+\alpha\,\vv{s}_{\rm null}) = L\vv{s}^* + \alpha\,L\vv{s}_{\rm null} = \vv{b}.
+\]
+This gives infinitely many solutions.  The null modes appear as
+\emph{streaky artefacts} aligned with the icosahedral mesh structure
+(``hourglass modes''); they are low-wave-number and cannot be killed by
+a high-pass regulariser without distorting the physical signal.
+
+\paragraph{Contrast with open surfaces.}  On an open dome (as in the
+reference cMSM method), the boundary conditions pin the displacements
+and anchor the stress, removing the null space.  Closed surfaces have no
+such anchor, making the problem intrinsically more difficult.
+
+%% -------------------------------------------------------------------------
+\subsection{Tikhonov regularisation}
+\label{sec:tikhonov}
+
+Because $L$ is rank-deficient, a direct solve fails (or returns a
+numerically arbitrary result dominated by the null modes).  We instead
+minimise the Tikhonov-regularised objective
+\begin{equation}
+  \min_{\vv{s}}\;\bigl\|L\vv{s}-\vv{b}\bigr\|^2
+  + \lambda^2\,\bigl\|R\vv{s}\bigr\|^2,
+  \label{eq:tikhonovobjective}
+\end{equation}
+whose normal equations are
 \begin{equation}
   (L^\top L + \lambda^2 R^\top R)\,\vv{s} = L^\top\vv{b},
   \label{eq:tikhonov}
 \end{equation}
-with $R$ a smoothness regulariser (e.g.\ identity or discrete Laplacian) and
-$\lambda\approx 0.01$--$0.05$.  After solving, a light Laplacian
-post-smoothing ($\sigma\leftarrow(1-\alpha)\sigma+\alpha\bar\sigma_{1\text{-ring}}$,
-$\alpha=0.5$, $\sim\!12$ iterations) suppresses the residual icosahedral
-discretisation artefacts.
+where:
+\begin{itemize}[nosep]
+  \item $R$ is a \emph{roughness} (smoothness) regulariser — in practice
+        the discrete surface gradient of each ambient stress component, so
+        that $\|R\vv{s}\|^2=\sum_{ab}\|\nabla_s N_{ab}\|^2$.
+  \item $\lambda\approx0.01$--$0.05$ is a small penalty weight.
+\end{itemize}
+
+The regulariser acts as a \emph{tie-breaker}: among the infinitely many
+solutions that satisfy $L\vv{s}=\vv{b}$, it selects the one with minimum
+spatial variation.  The oscillatory null modes have high roughness, so
+they are suppressed at the cost of a small bias in the smooth physical
+modes.  The residual low-frequency artefacts are removed by a final
+Laplacian post-smoothing pass
+($\sigma\leftarrow(1-\alpha)\sigma+\alpha\bar\sigma_{1\text{-ring}}$,
+$\alpha=0.5$, ${\sim}12$ iterations).
 
 %% =========================================================================
 \section{Extracting the principal curvature frame}
@@ -420,6 +511,64 @@ unavoidable on any closed genus-0 mesh}, regardless of resolution or
 neighbourhood size.
 
 %% =========================================================================
+\section{Principal stress directions}
+\label{sec:stress-dirs}
+
+%% -------------------------------------------------------------------------
+\subsection{Curvature directions vs.\ stress directions}
+
+The \emph{principal curvature directions} $(\vv{e}_1^{\rm pc},\vv{e}_2^{\rm pc})$
+are a geometric property of the surface shape — eigenvectors of the shape
+operator $\mathbf{B}$.  The \emph{principal stress directions} are the
+eigenvectors of the stress tensor $\Nb$ at each vertex.  These two sets of
+directions are \textbf{generally distinct}.
+
+They coincide when the geometry and loading share the same symmetry.  For a
+\emph{surface of revolution} under \emph{axisymmetric loading} (e.g.\ uniform
+pressure on a sphere or spheroid), symmetry forces the principal stress
+directions to align with the meridional and hoop directions — which are
+simultaneously the eigenvectors of $\mathbf{B}$.  In this case the shear DOF
+$r=0$ exactly (by symmetry), and $p=\sigma_1 t$, $q=\sigma_2 t$ directly.
+
+On a \emph{general closed surface} no such symmetry exists.  The tangential
+equilibrium equations $(\divs\Nb)\cdot\vv{e}_\alpha^{\rm pc}=0$ require
+spatial gradients of the stress components to balance across the mesh; this
+coupling forces $r\ne 0$ even in the principal curvature frame, meaning the
+principal stress axes tilt away from the curvature axes.
+
+%% -------------------------------------------------------------------------
+\subsection{Extracting principal stress directions from the solve}
+\label{sec:d1d2}
+
+After solving for $(p,q,r)$ in the principal curvature frame
+(equation~\eqref{eq:dofs-pc}), the eigenvector of
+$\bigl[\begin{smallmatrix}p&r\\r&q\end{smallmatrix}\bigr]$ for the larger
+eigenvalue $N_1$ makes angle $\theta_s$ with $\vv{e}_1^{\rm pc}$:
+\begin{equation}
+  \theta_s = \tfrac12\arctan\!\frac{2r}{p-q}.
+  \label{eq:theta-s}
+\end{equation}
+The principal stress directions in world $\R^3$ are then
+\begin{equation}
+  \vv{d}_1 = \cos\theta_s\;\vv{e}_1^{\rm pc} + \sin\theta_s\;\vv{e}_2^{\rm pc},
+  \qquad
+  \vv{d}_2 = \nn\times\vv{d}_1.
+  \label{eq:d1d2}
+\end{equation}
+These are unit vectors orthogonal to $\nn$ and to each other.  On axisymmetric
+surfaces $r\approx 0$ so $\theta_s\approx 0$ and $\vv{d}_1\approx\vv{e}_1^{\rm pc}$;
+on general surfaces $|\theta_s|>0$ quantifies the tilt.
+
+The \emph{alignment diagnostic}
+\begin{equation}
+  \delta = \frac{|r|}{|p|+|q|}
+  \label{eq:alignment}
+\end{equation}
+is $\approx 1$--$2\%$ on the sphere and spheroid (nearly aligned) and
+will be non-trivially large on non-symmetric surfaces such as the
+chick neural tube.
+
+%% =========================================================================
 \section{Summary: the per-vertex output}
 \label{sec:output}
 
@@ -430,22 +579,27 @@ For each vertex the pipeline produces:
 \toprule
 \textbf{Quantity} & \textbf{Symbol} & \textbf{Dimensions} \\
 \midrule
-Principal curvatures    & $\kone,\ktwo$                & $\mathrm{m}^{-1}$ \\
-Principal radii         & $R_1=1/\kone,\;R_2=1/\ktwo$ & $\mathrm{m}$       \\
-Mean / Gaussian         & $H,K$                        & $\mathrm{m}^{-1}$, $\mathrm{m}^{-2}$ \\
-Principal direction 1   & $\vv{e}_1^{\rm pc}\in\R^3$  & ---                \\
-Principal direction 2   & $\vv{e}_2^{\rm pc}\in\R^3$  & ---                \\
-Outward unit normal     & $\nn\in\R^3$                 & ---                \\
+Principal curvatures       & $\kone,\ktwo$                        & $\mathrm{m}^{-1}$ \\
+Principal radii            & $R_1=1/\kone,\;R_2=1/\ktwo$         & $\mathrm{m}$       \\
+Mean / Gaussian            & $H,K$                                & $\mathrm{m}^{-1}$, $\mathrm{m}^{-2}$ \\
+Curvature direction 1      & $\vv{e}_1^{\rm pc}\in\R^3$          & ---                \\
+Curvature direction 2      & $\vv{e}_2^{\rm pc}\in\R^3$          & ---                \\
+Outward unit normal        & $\nn\in\R^3$                         & ---                \\
 \midrule
-Stress resultant (after solve)  & $N_{11},N_{22},N_{12}$ & $\mathrm{N/m}$ \\
-Principal stresses              & $\sigma_1,\sigma_2$     & $\mathrm{Pa}$  \\
+Stress resultant (after solve) & $N_{11},N_{22},N_{12}$           & $\mathrm{N/m}$     \\
+Principal stresses             & $\sigma_1,\sigma_2$               & $\mathrm{Pa}$      \\
+Principal stress direction 1   & $\vv{d}_1\in\R^3$                & ---                \\
+Principal stress direction 2   & $\vv{d}_2=\nn\times\vv{d}_1$     & ---                \\
+Alignment diagnostic           & $\delta=|r|/(|p|+|q|)$           & ---                \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\noindent The curvature frame is computed by \texttt{surface\_curvature\_frame.py}
-(\texttt{compute\_curvature\_frame}); the stress solve is in
-\texttt{membrane\_stress\_fd.py} (\texttt{solve\_membrane}).
+\noindent The curvature frame $(\kone,\ktwo,\vv{e}_1^{\rm pc},\vv{e}_2^{\rm pc},\nn)$ is
+computed by \texttt{surface\_curvature\_frame.py} (\texttt{compute\_curvature\_frame}).
+The stress solve and principal stress directions $(\vv{d}_1,\vv{d}_2)$ are in
+\texttt{membrane\_stress\_fd\_v2.py} (\texttt{solve\_membrane}); the basic solve
+(without directions) is in \texttt{membrane\_stress\_fd.py}.
 
 %% =========================================================================
 \section{Validation cases}
@@ -547,5 +701,127 @@ unavoidable singularities at the two umbilic cap poles.  The cylinder body is
 entirely clean.  For real biological meshes (non-umbilic almost everywhere) the
 spheroid/capsule result is the relevant model.  The sphere is the degenerate
 worst case.
+
+%% =========================================================================
+\section{Proposed validation checks}
+\label{sec:validation-checks}
+
+The following checks are ordered from most immediate (can be run now) to
+longer-term, and are designed to build confidence that the GFDM solve
+produces physically correct stresses before using the output for
+biological interpretation.
+
+%% -------------------------------------------------------------------------
+\subsection{Analytic benchmarks (already partly done)}
+
+\begin{enumerate}[label=(\alph*)]
+  \item \textbf{Sphere.}  $\sigma_1=\sigma_2=\Delta p R/2t$ everywhere.
+        Check: median of $(\sigma_1+\sigma_2)/2$ matches analytic; any
+        deviation is a measure of the null-mode bias.
+        \emph{Status: done; median error $<1\%$, spurious deviatoric $\sim4\%$.}
+
+  \item \textbf{Prolate spheroid.}  Analytic $\sigma_{\rm hoop}$ and
+        $\sigma_{\rm merid}$ from the axisymmetric membrane formula.
+        Check that both components and the 1.75 hoop/merid ratio are
+        reproduced away from the poles.
+        \emph{Status: done; $\sigma_{\rm max}$ error $\sim3\%$,
+        $\sigma_{\rm min}$ error $\sim17\%$ (pre-smoothing).}
+
+  \item \textbf{Pressurised cylinder (capsule body).}
+        Analytic: $\sigma_{\rm hoop}=\Delta p R/t$,
+        $\sigma_{\rm axial}=\Delta p R/2t$.
+        The capsule mesh already implemented; stress on the cylinder body
+        should match within a few percent.
+        \emph{Status: done; $\sigma_{\rm max}\approx423$ vs analytic 400
+        (6\%); $\sigma_{\rm min}\approx204$ vs analytic 200 ($2\%$).}
+\end{enumerate}
+
+%% -------------------------------------------------------------------------
+\subsection{Convergence under mesh refinement}
+
+Refine the IcoSphere from subdiv-3 through subdiv-6 (642, 2562, 10242,
+40962 vertices) and plot the relative error against the analytic sphere
+solution as a function of mesh spacing $h$.  Expected: roughly second-order
+convergence ($\sim h^2$) from the quadratic Taylor fit, confirming the
+GFDM operator accuracy.
+
+Also check that the spurious deviatoric (null-mode bias) on the sphere
+decreases monotonically with refinement.
+
+%% -------------------------------------------------------------------------
+\subsection{Pressure and thickness linearity}
+
+For a statically-determinate membrane the stress scales exactly as
+$\sigma\propto\Delta p/t$.  Verify on the sphere and spheroid that:
+\begin{equation}
+  \sigma_1(\Delta p_2,\,t_2)
+  = \frac{\Delta p_2/t_2}{\Delta p_1/t_1}\;\sigma_1(\Delta p_1,\,t_1).
+\end{equation}
+This is a fast, parameter-free sanity check that does not require analytic
+knowledge.
+
+%% -------------------------------------------------------------------------
+\subsection{Equilibrium residual}
+
+The relative residual
+\begin{equation}
+  \varepsilon = \frac{\|L\vv{s}-\vv{b}\|}{\|\vv{b}\|}
+\end{equation}
+should be $\lesssim10^{-2}$ on smooth analytic meshes and
+$\lesssim0.2$ on real irregular meshes (which have coarser, non-uniform
+stencils).  Values significantly above these thresholds signal either
+a stencil quality problem (too few neighbours, poor conditioning) or a
+breakdown of the membrane assumption.
+
+%% -------------------------------------------------------------------------
+\subsection{Shear diagnostic on a non-symmetric surface}
+
+On the real HH17/HH20 meshes, compute the alignment diagnostic
+$\delta=|r|/(|p|+|q|)$ at every vertex and map it onto the surface.  For
+regions of strong geometric anisotropy (large $|\kappa_1-\kappa_2|$) a
+large $\delta$ signals that the stress principal axes have rotated
+substantially away from the curvature axes — a non-trivial, biologically
+interesting result.  For nearly isotropic regions $\delta$ should remain
+small.  A spatially random $\delta$ field would suggest numerical noise
+rather than a physical signal.
+
+%% -------------------------------------------------------------------------
+\subsection{Smoothing sensitivity}
+
+Repeat the solve with $\alpha\in\{0.3,0.5,0.7\}$ and
+$n_{\rm iter}\in\{6,12,24\}$.  The key observables (locations of stress
+maxima, anisotropy ratio $\sigma_1/\sigma_2$) should be stable across this
+range; only the amplitude of the icosahedral artefacts should change.
+If the location of the stress maximum shifts with smoothing, the underlying
+signal may be too weak relative to the null-mode noise.
+
+%% -------------------------------------------------------------------------
+\subsection{FEM cross-check (M3)}
+
+Inflate the same sphere and prolate spheroid geometries with a
+neo-Hookean hyperelastic FEM at the same $\Delta p=20$\,Pa and compare the
+resulting principal stresses to the GFDM inference.  Because the membrane
+problem is statically determinate (stress independent of material model),
+the FEM and GFDM results should agree to within the mesh-discretisation
+error for thin walls ($t/R\ll1$).  A systematic offset would indicate
+either a bug in the GFDM assembly or a geometric nonlinearity not captured
+by the linear membrane assumption.
+
+%% -------------------------------------------------------------------------
+\subsection{Principal stress direction field on real meshes}
+
+Visualise $\vv{d}_1$, $\vv{d}_2$ (equation~\eqref{eq:d1d2}) as symmetric
+line segments on HH17 and HH20.  Compare qualitatively with known
+biological intuition:
+\begin{itemize}[nosep]
+  \item The neural tube is a pressurised tube; hoop stress should dominate
+        in the cylindrical body, with $\vv{d}_1$ circumferential.
+  \item At the tube ends (closing folds) the stress state is expected to
+        become more isotropic or to rotate toward meridional.
+  \item HH20 (later stage, more curved/asymmetric) should show larger
+        shear diagnostic $\delta$ than HH17.
+\end{itemize}
+Agreement with these expectations is qualitative but provides an
+independent check on the sign and orientation of the computed stress field.
 
 \end{document}

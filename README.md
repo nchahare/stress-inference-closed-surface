@@ -117,10 +117,14 @@ already-visited parent — reducing flips from 34 to 2. The remaining 2 are the 
 of the spheroid (genuine topological singularities; Poincaré-Hopf requires ≥ 2 on a closed
 genus-0 surface; unfixable by any algorithm).
 
-**New LaTeX document:** `tension_inference.tex` / `.pdf` — standalone 6-page derivation
-covering: surface parametrisation and fundamental forms, membrane stress resultant,
-balance of linear momentum (normal projection → Young-Laplace; tangential → in-plane
-equilibrium), ambient-component GFDM trick, and the 2×2 analytic diagonalisation.
+**LaTeX document:** `tension_inference.tex` / `.pdf` — standalone derivation (continuously
+updated). Current sections: surface parametrisation and fundamental forms, membrane stress
+resultant, balance of linear momentum (normal → Young-Laplace; tangential → in-plane
+equilibrium), ambient-component GFDM trick, 2×2 analytic diagonalisation, static
+indeterminacy and null modes on closed surfaces, Tikhonov regularisation, principal
+curvature frame solve, principal stress directions (d₁, d₂, θ_s), and a proposed
+validation roadmap (§9: convergence, linearity, residual thresholds, shear diagnostic,
+smoothing sensitivity, FEM cross-check, direction-field biology check).
 
 ```powershell
 # per-vertex principal curvature frame: kappa1, kappa2, e1, e2 (world R3), n
@@ -161,6 +165,64 @@ For real biological meshes (non-umbilic almost everywhere) the spheroid/capsule 
 is the relevant model: BFS leaves at most a handful of isolated singular vertices.
 
 CSV columns: `X,Y,Z, kappa1,kappa2, r1,r2, H,K, e1x,e1y,e1z, e2x,e2y,e2z, nx,ny,nz`
+
+### 8. Principal-curvature-frame stress solve and principal stress directions (new — 2026-06-17)
+
+`membrane_stress_fd_v2.py` is a revised version of the GFDM solve that uses the
+**principal curvature frame** (e₁, e₂, n from `compute_curvature_frame`) as the local tangent
+frame, instead of the arbitrary polynomial-fit frame (v₁, v₂).
+
+**What changes vs v1:**
+| | `membrane_stress_fd.py` (v1) | `membrane_stress_fd_v2.py` (v2) |
+|---|---|---|
+| Tangent frame | arbitrary fit (v₁, v₂) | principal curvature (e₁, e₂) |
+| σ₁, σ₂ result | same | same (eigenvalues are frame-independent) |
+| Extra outputs | — | d₁, d₂ (principal stress directions); r (shear diagnostic) |
+| Validation cases | sphere, spheroid | sphere, spheroid, capsule |
+| Visualization | 2-panel PNG | 3-panel PNG: σ₁ colour + white line segments for d₁ |
+
+**Principal stress directions** d₁, d₂ are extracted from the shear DOF r:
+```
+theta_s = 0.5 * arctan2(2*r, p - q)
+d1 = cos(theta_s) * e1 + sin(theta_s) * e2   # world-frame principal stress dir 1
+d2 = n x d1
+```
+
+**Why line segments, not arrows.**
+A principal stress direction is a **line field** — tension along +d₁ is physically identical
+to tension along −d₁. A directed arrow would incorrectly imply a signed (vector) quantity.
+The visualization uses symmetric line segments centered at each vertex, extending in ±d₁,
+which is the standard glyph for any line-field quantity (stress, curvature, fabric tensor).
+
+**Glyph sparseness logic** (`plot_stress_frame`): two independent filters control which
+vertices get a segment:
+1. **Umbilic suppression** — drops vertices where `|κ₁−κ₂| < 0.25 × max(|κ₁−κ₂|)`.
+   At those points d₁ is ill-defined (BFS noise dominates); showing a segment there is
+   misleading. On the capsule this cleanly removes the hemispherical caps; on the spheroid
+   it removes the two poles. On the sphere (all umbilic, `max ≈ 0`) this filter is
+   disabled and all vertices are shown.
+2. **Density cap** — from the surviving vertices, takes every Nth in index order so that
+   ~150 segments appear total. Sampling is by vertex index (approximately spatially uniform
+   on the regular IcoSphere/capsule meshes we use).
+
+**Principal curvature dirs ≠ principal stress dirs in general.**
+They coincide only when geometry and loading share the same symmetry — e.g., axisymmetric
+surface + uniform pressure. On such surfaces r ≈ 0 (confirmed: sphere 1%, spheroid 2.2%).
+On a general closed mesh (HH17/HH20) r will be non-trivially non-zero, quantifying how far
+the stress principal axes tilt away from the curvature axes to satisfy global equilibrium.
+
+**Capsule stress validation** (R=1, H=2, Δp=20, t=0.05):
+
+| region | σ_max mean | analytic | σ_min mean | analytic |
+|---|---|---|---|---|
+| cylinder body | 422.8 Pa | 400 Pa (Δp·R/t) | 204 Pa | 200 Pa (Δp·R/2t) |
+| hemispherical caps | ~200 Pa | 200 Pa (sphere: Δp·R/2t) | ~200 Pa | 200 Pa |
+
+```powershell
+# solve in principal curvature frame; sphere + spheroid + capsule -> out/membrane_stress_v2.png
+& $py membrane_stress_fd_v2.py                   # flags: --subdiv --depth --dp --t --lam --show
+& $py membrane_stress_fd_v2.py --show            # opens interactive 3-panel vedo window
+```
 
 ### 6. Final-results simulations (method comparison: Local vs cMSM vs FEM)
 
@@ -226,6 +288,7 @@ Last updated: **2026-06-17 (UTC-04:00)**
 - [x] `show_e2_spheroid.py` — sign-consistency visualiser on spheroid: 1-ring dot-product check, cyan/red colouring; confirmed 2 topological singularities at spheroid poles after BFS (34→2) — _2026-06-17_
 - [x] `show_e2_sphere.py` — sign-consistency visualiser on sphere (totally umbilic worst case): 314/2562 vertices (12%) inconsistent after BFS — hairy ball theorem in action; confirms spheroid is the relevant model for real meshes — _2026-06-17_
 - [x] `show_capsule.py` — capsule mesh builder (`make_capsule`) + curvature-frame validation + sign-consistency viewer; 3 region validation (cylinder κ₁=1/R κ₂=0 exact, caps κ₁=κ₂=1/R within 4–10%); 3/2522 (0.1%) inconsistent after BFS — _2026-06-17_
+- [x] `membrane_stress_fd_v2.py` — GFDM stress solve in the **principal curvature frame** (e₁,e₂); same σ₁,σ₂ as v1 (frame-independent eigenvalues); adds **d₁,d₂** (principal stress directions, world R³) via `θ_s = ½arctan2(2r, p−q)` and `r` shear diagnostic; `plot_stress_frame` renders 3-panel vedo plot (sphere + spheroid + capsule, σ₁ colour + **symmetric line segments** for d₁; stress is a line field so segments not arrows; umbilic regions suppressed by discriminant filter; ~150 segments per panel via stride subsampling) → `out/membrane_stress_v2.png` — _2026-06-17_
 - [x] **Final-results matrix started** — `local_stress.py` (M1), `final_sims.py` (sphere+ellipsoid M1+M2), `final_real.py` (HH17/HH20 M1+M2), `view_final.py` (interactive, grouped colour limits), `box_compare.py` + `real_box_compare.py` (box plots); ran Sims 1,2,7,8 + the two real meshes at **dp=20** — _2026-06-16_
 
 ### Final-results matrix (2 geom × 2 thickness × 3 methods = 12)
@@ -304,7 +367,8 @@ M1+M2 on **HH17 (decimated to HH20's 3766 pts) + HH20** for the real-mesh compar
 - `box_compare.py` — box plot Local vs cMSM vs analytical (sphere+ellipsoid) → `out/final/box_compare.png`
 - `real_box_compare.py` — box plot HH17 vs HH20 (Local & cMSM) → `out/final/real_box_compare.png`
 - `surface_curvature_frame.py` — principal curvature frame (κ₁,κ₂, **e₁**,**e₂**,**n**): shape-operator diagonalisation + BFS sign propagation for global consistency
-- `tension_inference.tex` / `.pdf` — standalone derivation of surface geometry, membrane balance equations (normal + tangential), GFDM, and curvature-frame extraction
+- `membrane_stress_fd_v2.py` — GFDM solve in the principal curvature frame (e₁,e₂); adds **d₁**,**d₂** (principal stress directions, world R³) and `r` shear diagnostic; `plot_stress_frame` renders 3-panel plot with σ₁ colour map and **symmetric line segments** for d₁ (line field, not arrows; umbilic-suppressed + stride-subsampled to ~150 glyphs)
+- `tension_inference.tex` / `.pdf` — standalone derivation of surface geometry, membrane balance equations (normal + tangential), GFDM, curvature-frame extraction, and principal stress directions
 - `show_e2_spheroid.py` — sign-consistency visualiser for **e₂** on spheroid (cyan=consistent, red=flipped; 2 residual singularities at umbilic poles)
 - `show_e2_sphere.py` — sign-consistency visualiser on sphere (totally umbilic worst case; 314 inconsistent after BFS — hairy ball theorem)
 - `show_capsule.py` — capsule mesh builder (`make_capsule`) + three-region curvature validation + sign-consistency viewer (mesh coloured by discriminant d=|κ₁−κ₂|/2)

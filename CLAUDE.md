@@ -77,6 +77,21 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
 - **DOFs**: 3 per vertex `(p,q,r)` for `N = p t1⊗t1 + q t2⊗t2 + r(t1⊗t2+t2⊗t1)` (builds in `N·n=0`).
 - **Solve** (`membrane_stress_fd.py`): assemble sparse `L` (3n×3n), Tikhonov-smoothed
   least squares `(LᵀL + λ²RᵀR) S = Lᵀb`, `b = -Δp·n`. `σ₁,σ₂ = eig([[p,r],[r,q]])/t`.
+- **Principal curvature frame variant** (`membrane_stress_fd_v2.py`): same solve, but uses
+  `e1, e2` (principal curvature directions from `compute_curvature_frame`) as the tangent
+  frame instead of the arbitrary fit frame `v1, v2`. DOFs then represent
+  `N = p e1⊗e1 + q e2⊗e2 + r(e1⊗e2+e2⊗e1)`. Result: `σ₁,σ₂` are **identical** to v1
+  (eigenvalues are frame-independent). New outputs: **`d1`, `d2`** (principal stress directions
+  in world R³) via `θ_s = ½ arctan2(2r, p−q)` → `d1 = cos θ_s · e1 + sin θ_s · e2`, and
+  the **`r` shear diagnostic** (|r|/(|p|+|q|) ≈ 1–2% on axisymmetric surfaces → ~0 when stress
+  and curvature axes coincide; non-trivial on general meshes).
+- **Principal curvature dirs ≠ principal stress dirs in general.** They coincide only when
+  geometry and loading share the same symmetry (axisymmetric surface + uniform pressure). On
+  general meshes `r≠0` in the curvature frame — the stress principal axes tilt away from the
+  curvature axes to satisfy global in-plane equilibrium. The shear `r` quantifies this tilt.
+- **Also returns `d1`, `d2`**: principal stress direction unit vectors in world R³; arrows from
+  these on the 3-panel vedo plot (sphere + spheroid + capsule) make the stress field visually
+  interpretable.
 - **Closed-surface null modes**: `L` has spurious near-null ("hourglass") modes that show up
   as streaky "lines" along the icosphere triangulation. Tikhonov smoothing (`λ≈0.01–0.05`)
   suppresses oscillatory ones; use **IcoSphere** (not UV `Sphere`) to avoid pole artifacts.
@@ -133,7 +148,11 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
 - `sphere_curvature.py` — per-vertex curvature, normals, local axes (`compute_vertex_frames`).
 - `curvature_compare.py` — mean curvature + normal arrows, sphere vs stretched.
 - `surface_fd.py` — GFDM surface-derivative operators + self-test.
-- `membrane_stress_fd.py` — direct GFDM membrane-stress solve (σ₁, σ₂).
+- `membrane_stress_fd.py` — direct GFDM membrane-stress solve (σ₁, σ₂); arbitrary fit frame.
+- `membrane_stress_fd_v2.py` — same solve in the **principal curvature frame** (e1, e2 from
+  `compute_curvature_frame`); adds `d1`, `d2` (principal stress directions, world R³) and `r`
+  shear diagnostic; includes `make_capsule` and `plot_stress_frame` (3-panel vedo plot:
+  sphere + spheroid + capsule, mesh coloured by σ₁, white d1 arrows).
 - `stress_smoothing_compare.py` — Laplacian smoothing of σ; raw vs smoothed vs mean (2×3 grid).
 - `membrane_stress_beltrami.py` — Beltrami/Airy stress-function solve (single scalar Φ).
 - `reg_compare.py` — cMSM-style (grad-trace + curl) regularization vs our Laplacian smoothing,
@@ -156,6 +175,12 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
 - `surface_fd.py` also has `build_derivative_operators` → 1st+2nd derivative ops (g_xi,g_eta,h_xixi,h_xieta,h_etaeta).
 - `stress_estimation.tex` / `.pdf` — equations, method, results (compile with `pdflatex` TWICE
   for refs; MiKTeX present). Embeds figures from `out/`.
+- `tension_inference.tex` / `.pdf` — standalone mathematical derivation (continuously updated).
+  Covers: surface geometry, membrane stress model, balance of linear momentum (GFDM trick),
+  principal curvature frame solve (§4.3), static indeterminacy + null modes (§4.5), Tikhonov
+  regularisation (§4.6), principal stress directions d₁/d₂ extraction (§6), proposed
+  validation roadmap §9 (convergence, linearity, residual thresholds, shear diagnostic,
+  FEM cross-check, direction-field biology).
 - `out/` — generated `.npy` / `.csv` / `.png` results.
 
 ## Conventions
