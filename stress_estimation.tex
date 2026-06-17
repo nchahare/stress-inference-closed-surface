@@ -1,0 +1,789 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{bm}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+
+\newcommand{\vv}[1]{\bm{#1}}
+\newcommand{\R}{\mathbf{R}}
+\newcommand{\NN}{\mathbf{N}}
+\newcommand{\nn}{\vv{n}}
+\newcommand{\kone}{\kappa_1}
+\newcommand{\ktwo}{\kappa_2}
+\newcommand{\Hmean}{H}
+\newcommand{\Kgauss}{K}
+\newcommand{\divs}{\nabla_{\!s}\!\cdot}
+
+\title{Estimating membrane stress on an arbitrary curved surface\\
+\large generalized finite differences for the membrane equilibrium PDE}
+\author{Working notes (vedo / spatchcocking / GFDM pipeline)}
+\date{2026-06-16}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We estimate the in-plane (membrane) stress on a triangulated surface directly from its
+geometry. From a local degree-2 surface fit at every vertex
+(\texttt{vedo.project\_point\_on\_variety}) we obtain a local orthonormal frame
+$(\vv{v}_1,\vv{v}_2,\vv{n})$ and the principal curvatures $\kone,\ktwo$. We then solve the
+membrane equilibrium PDE $\divs\NN+\Delta p\,\nn=\vv{0}$ for the tangential stress-resultant
+tensor $\NN$ using a \emph{generalized finite difference method} (GFDM) on the surface ---
+no FEM framework, no axisymmetry assumption, no material constants. The two principal
+membrane stresses $\sigma_1,\sigma_2$ are the eigenvalues of the recovered tensor divided
+by the wall thickness $t$. The method is validated against the analytic sphere
+($\sigma_1=\sigma_2=\Delta pR/2t$) and a prolate spheroid (anisotropy
+$\sigma_\theta/\sigma_\phi\to1.75$ at the equator); it recovers the mean stress to a few
+percent and reproduces the anisotropy, with a residual spurious deviatoric mode discussed
+in Section~\ref{sec:results}. Section~\ref{sec:cmsm} documents the precise relationship to
+curved Monolayer Stress Microscopy (cMSM), the method this pipeline adapts: identical
+physics, but a local GFDM discretization (closed surfaces) in place of their globally
+parametrized finite elements (open domes), with a different regularization strategy.
+\end{abstract}
+
+\section{Local geometry of the surface}
+
+At a vertex $\vv{p}$ we fit a local height function in the frame returned by the curvature
+fit. Let $(\vv{v}_1,\vv{v}_2,\vv{n})$ be the orthonormal local axes (the rows of the
+rotation matrix $\R$ from the fit: $\vv{v}_1,\vv{v}_2$ span the tangent plane, $\vv{n}$ is
+the unit normal). The surface is locally the Monge patch
+\begin{equation}
+  z = \tfrac12\!\left(a\,x^2 + 2b\,xy + c\,y^2\right) + \mathcal{O}(3),
+  \qquad (x,y)\ \text{along}\ (\vv{v}_1,\vv{v}_2),
+\end{equation}
+so the second fundamental form is $\mathrm{I\!I}=\bigl(\begin{smallmatrix}a&b\\b&c\end{smallmatrix}\bigr)$,
+with principal curvatures $\kone\ge\ktwo$ (eigenvalues), mean/Gaussian curvature
+$\Hmean=\tfrac12(\kone+\ktwo)$, $\Kgauss=\kone\ktwo$, and principal radii
+$R_{1,2}=1/\kappa_{1,2}$.
+
+\begin{figure}[h]\centering
+  \includegraphics[width=\textwidth]{out/curvature_compare.png}
+  \caption{Per-vertex mean curvature $\Hmean$ (colour) with vertex-normal arrows. Left: a
+  sphere, where $\Hmean=1/R$ is constant. Right: the same sphere stretched $\times2$ into a
+  prolate spheroid --- $\Hmean$ now varies, peaking ($\to2.0$ for $a{=}2b$) at the pointed
+  tips and dropping on the flattened flanks; the normals fan out radially at the tips and
+  stay nearly parallel along the flanks. Produced by \texttt{curvature\_compare.py}.}
+  \label{fig:curvature}
+\end{figure}
+
+\section{Membrane stress model and equilibrium}
+
+\paragraph{Assumptions.} Thin wall ($t\ll R_{1,2}$, bending negligible, stress uniform
+through the thickness); quasi-static equilibrium under a normal pressure jump
+$\Delta p=p_{\text{in}}-p_{\text{out}}$; no tangential body force.
+
+\paragraph{Stress resultant.} Let $\NN$ be the tangential symmetric membrane
+stress-resultant tensor (force per unit length, $\NN\nn=\vv0$). The membrane equilibrium
+of an element under pressure is the single ambient vector equation
+\begin{equation}
+  \boxed{\;\divs\NN + \Delta p\,\nn = \vv0\;}
+  \label{eq:equilibrium}
+\end{equation}
+where $\divs$ is the surface divergence. Crucially, Eq.~\eqref{eq:equilibrium}
+\emph{simultaneously} encodes the tangential equilibrium (its in-plane components) and the
+normal Young--Laplace law (its normal component): for a tangential tensor,
+$(\divs\NN)\cdot\nn=-\NN:\mathrm{I\!I}=-(N_1\kone+N_2\ktwo)$, so the normal component of
+\eqref{eq:equilibrium} is exactly
+\begin{equation}
+  N_1\,\kone + N_2\,\ktwo = \Delta p,
+  \qquad\Longleftrightarrow\qquad
+  \sigma_1\,\kone + \sigma_2\,\ktwo = \frac{\Delta p}{t},
+  \qquad N_i=\sigma_i\,t .
+  \label{eq:laplace}
+\end{equation}
+Working with \eqref{eq:equilibrium} in ambient (global Cartesian) components is what makes
+the method general: the frame-rotation / connection terms are handled implicitly, so no
+axisymmetry or principal-direction assumption is needed.
+
+\section{Analytic references (for validation only)}
+
+These closed forms are used to check the numerical solver; they are \emph{not} assumed by
+it.
+\begin{itemize}[noitemsep]
+  \item \textbf{Sphere} ($\kone=\ktwo=1/R$): isotropic $\sigma_1=\sigma_2=\dfrac{\Delta p\,R}{2t}$.
+  \item \textbf{Surface of revolution} (meridional $\phi$, hoop $\theta$; principal radii
+        $R_1,R_2$): $\;\sigma_\phi=\dfrac{\Delta p\,R_2}{2t}$,
+        $\;\sigma_\theta=\dfrac{\Delta p\,R_2}{t}\!\left(1-\dfrac{R_2}{2R_1}\right)$.
+        For a prolate spheroid (semi-axis $a$ along the axis, equatorial radius $b$,
+        $\beta$ the parametric angle): $R_1=J^3/(ab)$, $R_2=bJ/a$ with
+        $J=\sqrt{a^2\sin^2\beta+b^2\cos^2\beta}$. At the equator the anisotropy is
+        $\sigma_\theta/\sigma_\phi = 2\!\left(1-\tfrac{b^2}{2a^2}\right)$, i.e.\ $1.75$ for $a=2b$.
+\end{itemize}
+
+\section{Generalized finite differences on the surface}\label{sec:gfdm}
+
+We never build a global parametrization or a finite-element mesh. Instead, at every vertex
+we construct local finite-difference operators from its $k$-ring neighbourhood, entirely in
+that vertex's own tangent frame. This section gives the construction in full.
+
+\subsection{Local tangent coordinates}
+Let vertex $i$ have position $\vv p_i$ and orthonormal frame $(\vv v_1,\vv v_2,\vv n)$ from
+the curvature fit (Section~1). For each neighbour $j$ in the stencil $\mathcal N_i$ (the
+depth-$d$ $k$-ring) define local coordinates by projecting the edge vector onto the frame,
+\begin{equation}
+  \xi_j=(\vv p_j-\vv p_i)\!\cdot\!\vv v_1,\qquad
+  \eta_j=(\vv p_j-\vv p_i)\!\cdot\!\vv v_2,\qquad
+  \zeta_j=(\vv p_j-\vv p_i)\!\cdot\!\vv n .
+\end{equation}
+$(\xi_j,\eta_j)$ are tangential offsets and $\zeta_j$ is the (small) normal sag. A full
+quadratic fit needs $|\mathcal N_i|\ge5$ (degree~2 has five non-constant monomials).
+
+\subsection{Weighted-least-squares Taylor fit}
+For a scalar field $f$ sampled at the vertices, expand about $\vv p_i$ to second order in the
+tangent plane,
+\begin{equation}
+  f_j-f_i \;\approx\;
+  \xi_j f_\xi+\eta_j f_\eta
+  +\tfrac12\xi_j^2 f_{\xi\xi}+\xi_j\eta_j f_{\xi\eta}+\tfrac12\eta_j^2 f_{\eta\eta},
+  \qquad j\in\mathcal N_i,
+  \label{eq:taylor}
+\end{equation}
+with the five unknown derivatives collected in
+$\vv d_i=(f_\xi,f_\eta,f_{\xi\xi},f_{\xi\eta},f_{\eta\eta})^{\!\top}$. Stacking the
+$m=|\mathcal N_i|$ neighbour equations gives the overdetermined system
+$\mathbf P_i\,\vv d_i=\Delta\vv f_i$ with rows and right-hand side
+\begin{equation}
+  (\mathbf P_i)_{j}=\bigl(\xi_j,\ \eta_j,\ \tfrac12\xi_j^2,\ \xi_j\eta_j,\ \tfrac12\eta_j^2\bigr),
+  \qquad (\Delta\vv f_i)_j=f_j-f_i .
+\end{equation}
+We solve it in weighted least squares with $\mathbf W_i=\operatorname{diag}(w_j)$ and an
+inverse-distance taper $w_j=(\xi_j^2+\eta_j^2)^{-1}$ (a Gaussian
+$w_j=\exp(-\|\cdot\|^2/h^2)$ works equally well),
+\begin{equation}
+  \vv d_i=\mathbf M_i\,\Delta\vv f_i,\qquad
+  \mathbf M_i=\bigl(\mathbf P_i^{\!\top}\mathbf W_i\mathbf P_i\bigr)^{-1}\mathbf P_i^{\!\top}\mathbf W_i
+  \ \in\mathbb R^{5\times m}.
+  \label{eq:wls}
+\end{equation}
+The rows of $\mathbf M_i$ are the GFDM stencil weights: row~1 yields $\partial_\xi$, row~2
+$\partial_\eta$, rows~3--5 the three second derivatives.
+
+\subsection{Assembly into global sparse operators}
+Because $(\Delta\vv f_i)_j=f_j-f_i$, the first-derivative operator acting on the global field
+$\vv f\in\mathbb R^{n}$ is
+\begin{equation}
+  (G_\xi\vv f)_i=\sum_{j\in\mathcal N_i}(\mathbf M_i)_{1j}\,(f_j-f_i)
+  =\sum_{j\in\mathcal N_i}(\mathbf M_i)_{1j}\,f_j
+   -\Bigl(\sum_{j\in\mathcal N_i}(\mathbf M_i)_{1j}\Bigr)f_i ,
+\end{equation}
+i.e.\ we scatter $(\mathbf M_i)_{1j}$ into column $j$ of row $i$ and
+$-\sum_j(\mathbf M_i)_{1j}$ into the diagonal. This builds the sparse $n\times n$ matrices
+$G_\xi,G_\eta$ (and, from rows 3--5, the second-derivative operators
+$H_{\xi\xi},H_{\xi\eta},H_{\eta\eta}$; \texttt{build\_derivative\_operators} in
+\texttt{surface\_fd.py}). Each row lives in its \emph{own} tangent frame --- there is no
+shared coordinate system --- which is precisely what lets the scheme run on an arbitrary
+surface with no global chart.
+
+\subsection{Surface gradient, divergence, Laplace--Beltrami}
+In the orthonormal frame the metric is the identity, so the surface gradient of a scalar is
+the tangent vector
+\begin{equation}
+  \nabla_s f=(G_\xi f)\,\vv v_1+(G_\eta f)\,\vv v_2 ,
+\end{equation}
+and the Laplace--Beltrami operator is $\Delta_s f=H_{\xi\xi}f+H_{\eta\eta}f$. These were
+verified against analytic fields on the sphere ($\nabla_s z$, $\Delta_s z=-2z/R^2$,
+$\Delta_s(xy)=-6xy/R^2$) at $\approx$2nd order (Table~\ref{tab:ops}).
+
+\subsection{Stress unknowns and their ambient components}
+The membrane tensor carries three DOFs per vertex in the local tangent basis,
+\begin{equation}
+  \NN_i=p_i\,(\vv v_1\!\otimes\!\vv v_1)+q_i\,(\vv v_2\!\otimes\!\vv v_2)
+    +r_i\,(\vv v_1\!\otimes\!\vv v_2+\vv v_2\!\otimes\!\vv v_1),
+  \label{eq:Nlocal}
+\end{equation}
+which is symmetric and tangential ($\NN_i\vv n_i=\vv0$) by construction. We work with its
+\emph{ambient} (global Cartesian) $3\times3$ components: for $a,b\in\{x,y,z\}$,
+\begin{equation}
+  (N_i)_{ab}=p_i (v_1)_a(v_1)_b+q_i (v_2)_a(v_2)_b
+    +r_i\bigl[(v_1)_a(v_2)_b+(v_2)_a(v_1)_b\bigr].
+  \label{eq:Nambient}
+\end{equation}
+Each of the six independent components $N_{xx},N_{yy},N_{zz},N_{xy},N_{xz},N_{yz}$ is thus a
+fixed linear combination of $(p_i,q_i,r_i)$. Stacking the DOFs as
+$\vv S=(p_1,q_1,r_1,\dots,p_n,q_n,r_n)^{\!\top}\in\mathbb R^{3n}$, every ambient-component
+field is a sparse linear image $\mathbf C_{ab}\vv S$ of the unknowns.
+
+\subsection{Discrete equilibrium operator}
+The surface divergence of $\NN$ (a tangent vector) has ambient components obtained by
+differentiating each row of $\NN$ along the two tangent directions and contracting with the
+frame,
+\begin{equation}
+  (\divs\NN)_a
+  =\sum_{b}\Bigl[(v_1)_b\,G_\xi+(v_2)_b\,G_\eta\Bigr]N_{ab},
+  \qquad a\in\{x,y,z\}.
+  \label{eq:divN}
+\end{equation}
+Substituting the linear maps $N_{ab}=\mathbf C_{ab}\vv S$ turns the three ambient equilibrium
+equations per vertex into one sparse system,
+\begin{equation}
+  \mathbf L\,\vv S=\vv b,\qquad b_a=-\Delta p\,n_a,\qquad
+  \mathbf L\in\mathbb R^{3n\times3n}.
+  \label{eq:Lsystem}
+\end{equation}
+There are three ambient equations and three DOFs per vertex, so $\mathbf L$ is formally
+square; physically the three equations are two tangential balances plus one normal balance.
+
+\subsection{The normal projection \emph{is} the Laplace law}
+That the normal component of \eqref{eq:Lsystem} reproduces Young--Laplace is worth showing
+explicitly. Project $\divs\NN$ onto $\vv n$ (sum over repeated $a,b$ and tangent index
+$\alpha\in\{1,2\}$) and use $\NN\vv n=\vv0$ together with the Weingarten relation
+$\partial_\alpha\vv n=\sum_\beta \mathrm{I\!I}_{\alpha\beta}\vv v_\beta$ --- with the sign
+convention $\mathrm{I\!I}_{\alpha\beta}=+\partial_\alpha\vv n\!\cdot\!\vv v_\beta$, so that
+$\operatorname{tr}\mathrm{I\!I}=2H>0$ and tension is positive under $\Delta p>0$:
+\begin{align}
+  (\divs\NN)\!\cdot\!\nn
+  &=\sum_{a,b,\alpha} n_a\,(v_\alpha)_b\,\partial_\alpha N_{ab}
+   =\sum_{b,\alpha}(v_\alpha)_b\Bigl[\partial_\alpha\!\underbrace{(N_{ab}n_a)}_{=\,(\NN\nn)_b=0}
+     \;-\;N_{ab}\,\partial_\alpha n_a\Bigr]\notag\\
+  &=-\sum_{a,b,\alpha,\beta}\mathrm{I\!I}_{\alpha\beta}\,(v_\beta)_a(v_\alpha)_b\,N_{ab}
+   =-\,\NN:\mathrm{I\!I}=-(N_1\kone+N_2\ktwo).
+  \label{eq:normalproj}
+\end{align}
+Hence the normal part of $\divs\NN+\Delta p\,\nn=\vv0$ is exactly
+$N_1\kone+N_2\ktwo=\Delta p$, i.e.\ Eq.~\eqref{eq:laplace}. The connection terms never appear
+because we differentiate the ambient components directly; the geometry enters only through
+the frame vectors in \eqref{eq:Nambient} and \eqref{eq:divN}. (Getting the sign in
+$\mathrm{I\!I}$ wrong here flips $\sigma$ to spurious compression --- a bug we hit and traced
+to the Weingarten sign.)
+
+\subsection{Regularization and solve}
+On a closed surface $\mathbf L$ has spurious near-null (``hourglass'') modes, so we solve the
+roughness-penalized least-squares problem
+\begin{equation}
+  \min_{\vv S}\ \|\mathbf L\vv S-\vv b\|^2 + \lambda^2\,\|\mathbf R\vv S\|^2
+  \quad\Longleftrightarrow\quad
+  (\mathbf L^{\!\top}\mathbf L+\lambda^2\mathbf R^{\!\top}\mathbf R)\,\vv S=\mathbf L^{\!\top}\vv b,
+  \label{eq:tikhonov}
+\end{equation}
+where $\mathbf R$ stacks $G_\xi,G_\eta$ applied to each of the six independent ambient
+components of $\NN$, so $\|\mathbf R\vv S\|^2$ penalizes the surface gradient of the stress
+field (a Tikhonov roughness penalty). The normal equations are solved by sparse \texttt{LU};
+for large meshes we instead apply \texttt{scipy.sparse.linalg.lsqr} to the augmented system
+$[\mathbf L;\ \lambda\mathbf R]\,\vv S=[\vv b;\ \vv0]$, avoiding the dense fill-in of
+$\mathbf L^{\!\top}\mathbf L$. Finally the principal membrane stresses are the eigenvalues of
+the local $2\times2$ block over the wall thickness,
+\begin{equation}
+  \sigma_{1,2}=\frac1t\,\operatorname{eig}\!\begin{pmatrix}p&r\\ r&q\end{pmatrix}.
+\end{equation}
+The whole pipeline uses only \texttt{scipy.sparse} --- no FEM framework, no axisymmetry, no
+material constants.
+
+\section{Results}\label{sec:results}
+
+\paragraph{Operators.} The GFDM operators converge at $\approx$2nd order
+(Table~\ref{tab:ops}), confirming the surface differentiation is consistent.
+
+\begin{table}[h]\centering
+\begin{tabular}{lccc}
+\toprule
+mean error vs analytic & $\nabla_s z$ & $\Delta_s z=-2z/R^2$ & $\Delta_s(xy)=-6xy/R^2$ \\
+\midrule
+UV sphere res $40$ & $8.5\times10^{-4}$ & $7.1\times10^{-3}$ & $3.4\times10^{-2}$ \\
+UV sphere res $80$ & $2.2\times10^{-4}$ & $1.7\times10^{-3}$ & $8.8\times10^{-3}$ \\
+\bottomrule
+\end{tabular}
+\caption{Surface-derivative operator accuracy (poles excluded); halving the spacing cuts
+the Laplace--Beltrami error by $\approx4\times$.}
+\label{tab:ops}
+\end{table}
+
+\paragraph{Membrane stress.} With $\Delta p=1$, $t=0.05$ (so $\Delta pR/2t=10$),
+icosphere meshes, depth-2 stencils:
+\begin{table}[h]\centering
+\begin{tabular}{llcccc}
+\toprule
+case & quantity & numeric mean & analytic & median rel.\ err. \\
+\midrule
+sphere ($R{=}1$)        & $(\sigma_1{+}\sigma_2)/2$ & $10.0$  & $10.0$  & $1$--$3.5\%$ \\
+                        & $\sigma_{\max},\sigma_{\min}$ & $10.6,\ 9.4$ & $10,\ 10$ & spurious dev.\ $\sim5\%$ \\
+spheroid ($\times2$)    & $\sigma_{\max}$ (hoop)    & $15.7$  & $15.7$  & $\sim2\%$ \\
+                        & $\sigma_{\min}$ (merid.)  & $9.2$   & $9.2$   & $\sim8\%$ \\
+                        & equator anisotropy        & \multicolumn{2}{c}{captured $\to1.75$} & \\
+\bottomrule
+\end{tabular}
+\caption{Membrane stress vs the analytic references. The mean (isotropic) stress and the
+anisotropy magnitude/direction are recovered; the principal split carries a spurious
+deviatoric error.}
+\label{tab:stress}
+\end{table}
+
+\begin{figure}[h]\centering
+  \includegraphics[width=\textwidth]{out/membrane_stress_ico5.png}
+  \caption{Larger principal membrane stress $\sigma_{\max}$ from the GFDM solve (icosphere,
+  subdiv\,5, depth\,3). Left: sphere --- nearly uniform at the analytic value
+  $\Delta pR/2t=10$. Right: prolate spheroid ($\times2$) --- $\sigma_{\max}$ (the hoop
+  stress) grows toward the equatorial band, matching the analytic axisymmetric reference
+  (Table~\ref{tab:stress}). Produced by \texttt{membrane\_stress\_fd.py}.}
+  \label{fig:stress}
+\end{figure}
+
+\paragraph{What works and what limits accuracy.}
+\begin{itemize}[noitemsep]
+  \item The ambient-component GFDM solve is genuinely general (arbitrary surfaces, no
+        axisymmetry) and frees us from any FEM framework; the equilibrium residual
+        $\|\mathbf L\vv S-\vv b\|/\|\vv b\|$ reaches $\sim\!10^{-3}$.
+  \item The \emph{mean} stress $(\sigma_1+\sigma_2)/2$ is accurate to a few percent in the
+        median, and the spheroid \emph{anisotropy} (hoop $>$ meridional, ratio $\to1.75$ at
+        the equator) is reproduced. Note, however, that the structured-mesh artifact
+        contaminates the \emph{whole} field, not just the deviatoric part: on the sphere the
+        mean-stress field still carries the icosahedral speckle (std $\approx6.8\%$, almost
+        as large as $\sigma_{\max}$), so ``use the mean instead of the principal stresses''
+        is \emph{not} a cure for the lines.
+  \item A \emph{spurious deviatoric} mode remains on the sphere, where the true answer is
+        exactly isotropic (a genus-0 surface admits no smooth divergence-free traceless
+        tensor field, so this is purely a discretization artifact --- a near-null mode of
+        $\mathbf L$). A $\lambda$ sweep showed the equilibrium residual falls with
+        $\lambda$ (from $7.7\times10^{-3}$ at $\lambda{=}0.05$ down to $2.6\times10^{-4}$ at
+        $\lambda{=}0.002$) while the spurious deviatoric \emph{plateaus} at $\sim$5--7\% ---
+        confirming it is a discrete null mode, not a smoothing bias. It does \emph{converge,
+        slowly}, under mesh/stencil refinement: a degree-2 stencil over a depth-3
+        neighbourhood on a finer icosphere ($10\,242$ vertices) reduces it from $\sim$7\% to
+        $\sim$4\%, while the mean stress stays within $0.5\%$. Using a uniform
+        \texttt{IcoSphere} removes the UV-sphere pole artifact; mild Tikhonov smoothing
+        (\eqref{eq:tikhonov}, $\lambda\approx0.01$--$0.05$) suppresses the oscillatory modes.
+        Best configuration to date: \texttt{IcoSphere} subdiv\,5, depth\,3,
+        $\lambda\approx0.01$--$0.02$ (spurious deviatoric $\sim$4\%, residual $\sim10^{-3}$).
+\end{itemize}
+
+\paragraph{Laplacian smoothing (recommended post-processing).} A light umbrella
+(Laplacian) smoothing pass on the recovered stress fields ---
+$\sigma\leftarrow(1-\alpha)\sigma+\alpha\,\bar\sigma_{\text{1-ring}}$ iterated a few times,
+a standard geometry-processing filter --- removes the structured-mesh artifact most
+effectively while preserving the physical signal. On the sphere it cuts the spurious
+$\sigma_{\max}$ scatter from std $0.69$ to $0.15$ ($\sim$4.5$\times$, the residual being
+$\sim$1.5\% of the value); on the spheroid it erases the streaks while leaving the genuine
+equatorial hoop-stress gradient intact (Figure~\ref{fig:smooth}). This is the cleanest
+result obtained and is the recommended way to display/report $\sigma_1,\sigma_2$; the raw
+per-vertex values are retained in the data.
+
+\begin{figure}[h]\centering
+  \includegraphics[width=\textwidth]{out/stress_smoothing_compare.png}
+  \caption{Raw $\sigma_{\max}$ (left) vs Laplacian-smoothed $\sigma_{\max}$ (centre) vs mean
+  stress $(\sigma_1+\sigma_2)/2$ (right), on a shared colour scale ($6$--$23$). Top: sphere
+  --- the smoothed panel is the most uniform; both the raw and the \emph{mean} panels retain
+  the icosahedral lines, confirming the artifact is whole-field, not purely deviatoric.
+  Bottom: prolate spheroid ($\times2$) --- smoothing removes the streaks while preserving the
+  real hoop-stress band at the equator. Produced by \texttt{stress\_smoothing\_compare.py}.}
+  \label{fig:smooth}
+\end{figure}
+
+\section{Recipe (per vertex)}
+
+\begin{enumerate}[noitemsep]
+  \item Fit local frame $(\vv v_1,\vv v_2,\vv n)$ and curvatures $\kone,\ktwo$
+        (\texttt{sphere\_curvature.py}).
+  \item Build GFDM operators $G_\xi,G_\eta$ from the $k$-ring neighbourhoods
+        (\texttt{surface\_fd.py}).
+  \item Assemble $\mathbf L$ for $\divs\NN$, set $\vv b=-\Delta p\,\nn$, solve the
+        Tikhonov-smoothed system \eqref{eq:tikhonov} (\texttt{membrane\_stress\_fd.py}).
+  \item Recover $\sigma_1,\sigma_2$ as eigenvalues of the local $2\times2$ stress over $t$.
+\end{enumerate}
+
+\section{Application to real meshes (chick neural tube)}\label{sec:realmesh}
+
+The pipeline above (direct GFDM solve $+$ Laplacian smoothing) was applied unchanged to two
+specimen surface meshes of the chick neural tube, stages \textbf{HH17} and \textbf{HH20}
+(binary VTK polydata). Both are \emph{closed} surfaces (zero boundary edges; one trivial
+non-manifold edge each), so the same centroid-outward normal orientation and pressure load
+used for the sphere apply directly --- no boundary conditions, no axisymmetry, exactly as
+intended for arbitrary surfaces.
+
+\paragraph{Decimation (numerical, not biological).} HH17 has $64{,}001$ vertices
+($\Rightarrow192{,}003$ DOFs); the sparse \texttt{LU} factorization of the normal equations
+runs out of memory at that size. We therefore decimate HH17 with \texttt{vedo.decimate} to
+$\sim\!4{,}000$ vertices (matching HH20's $3{,}766$), after which the direct solve takes
+$\approx$11\,s. For meshes left at full resolution, \texttt{solve\_membrane} now falls back
+to an iterative least squares on the augmented system $[\mathbf L;\lambda\mathbf R]$
+(memory-light, no dense fill-in); on the $192$k-DOF system this did not converge within a
+practical iteration budget, so decimation is the current route. Decimation also smooths the
+geometry slightly, which feeds back into the curvature and should be checked by refinement.
+
+\paragraph{Settings.} $\Delta p=20$\,Pa (the fixed project pressure), $t=0.05$ (a placeholder
+thickness; stress scales linearly as $\Delta p/t$, so the \emph{pattern} is set by geometry ---
+pass a measured thickness when available), depth-3 stencils, $\lambda=0.02$, Laplacian
+smoothing $12$ iterations at
+$\alpha=0.5$. Run with \texttt{real\_mesh\_stress.py} (auto-decimates meshes above
+$4{,}000$ vertices and writes per-vertex CSV $+$ NPZ $+$ VTP for re-plotting).
+
+\begin{table}[h]\centering
+\begin{tabular}{lccc}
+\toprule
+mesh (vertices) & equil.\ residual & $\sigma_{\max}$ std: raw $\to$ smoothed & $\sigma_{\min}$ std: raw $\to$ smoothed \\
+\midrule
+HH17 (dec.\ $4001$) & $0.20$ & $3.2\times10^{5}\to1.3\times10^{5}$ & $3.0\times10^{5}\to1.1\times10^{5}$ \\
+HH20 ($3766$)       & $0.18$ & $6.1\times10^{5}\to2.1\times10^{5}$ & $6.2\times10^{5}\to2.5\times10^{5}$ \\
+\bottomrule
+\end{tabular}
+\caption{Direct GFDM solve $+$ Laplacian smoothing on the real meshes ($\Delta p=20$,
+$t=0.05$). Smoothing cuts the per-vertex scatter $\sim2.5\times$, as on the sphere. The
+equilibrium residual is far higher than the sphere's ($\sim10^{-3}$): real, irregular
+triangulations with sharp curvature variation do not satisfy the discrete equilibrium
+tightly, so these fields should be read as the \emph{smoothed pattern}, not precise values.}
+\label{tab:realmesh}
+\end{table}
+
+\begin{figure}[h]\centering
+  \includegraphics[width=\textwidth]{out/real_mesh_stress_compare.png}
+  \caption{Real meshes: raw $\sigma_{\max}$ (left), Laplacian-smoothed $\sigma_{\max}$
+  (centre), smoothed mean stress (right); top row HH17 (decimated), bottom row HH20, each on
+  its own $2$--$98$ percentile colour scale. As on the sphere, the raw field is speckled with
+  the structured-mesh artifact and smoothing recovers a coherent pattern. Produced by
+  \texttt{real\_mesh\_stress.py}; the smoothed-only fields can be inspected interactively with
+  \texttt{view\_smoothed.py}.}
+  \label{fig:realmesh}
+\end{figure}
+
+\begin{figure}[h]\centering
+  \includegraphics[width=\textwidth]{out/HH_smoothed_view.png}
+  \caption{Laplacian-smoothed $\sigma_{\max}$ on the real chick neural-tube meshes
+  ($\Delta p=20$\,Pa, $t=0.05$, depth-3 GFDM stencils, 12 umbrella-smoothing iterations at
+  $\alpha=0.5$). Left: HH17 (decimated $64{,}001\to4{,}001$ vertices). Right: HH20
+  ($3{,}766$ vertices). Colour scale is per-mesh $2$--$98$ percentile; the two embryos
+  differ in absolute coordinates so their scales differ. Produced by
+  \texttt{real\_mesh\_stress.py}; interactive exploration via \texttt{view\_smoothed.py}.}
+  \label{fig:hhsmooth}
+\end{figure}
+
+\paragraph{Caveats on the real meshes.} (i) The high equilibrium residual ($\sim0.2$) means
+absolute values are not trustworthy --- the study should report relative/anisotropy patterns,
+not magnitudes. (ii) The raw $\sigma_{\min}$ goes strongly negative (compression) with
+scatter comparable to the mean, again a discretization artifact that smoothing tempers.
+(iii) Thickness here is a uniform placeholder; the planned next step is to compare uniform
+$t$ against a measured non-uniform field $t(\mathbf X)$, and to cross-check against a 3D
+hyperelastic FEM (see the manuscript outline, \texttt{manuscript\_outline.tex}).
+
+\section{Final-results method comparison (Local vs.\ cMSM)}\label{sec:final}
+
+For the final results we compare three methods of increasing fidelity on each geometry:
+\textbf{M1 (Local)} --- a curvature-only estimate with no equilibrium solve; \textbf{M2
+(cMSM)} --- the GFDM inference of Section~\ref{sec:gfdm} with Laplacian post-smoothing; and
+\textbf{M3 (FEM)} --- a neo-Hookean inflation (pending). All runs use IcoSphere subdiv-5,
+depth-3, $\Delta p=20$\,Pa, $t=0.05$ (\texttt{final\_sims.py}, \texttt{final\_real.py}).
+
+\paragraph{M1, the local estimate.} On a surface of revolution the membrane stresses follow
+from the two principal radii by the classic pressure-vessel relations,
+\begin{equation}
+  \sigma_{\text{merid}}=\frac{\Delta p\,r_{\text{hoop}}}{2t},\qquad
+  \sigma_{\text{hoop}}=\frac{\Delta p\,r_{\text{hoop}}}{t}\!\left(1-\frac{r_{\text{hoop}}}{2r_{\text{merid}}}\right),
+\end{equation}
+which we evaluate per vertex from the measured curvature: the hoop curvature is purely
+geometric, $\kappa_{\text{hoop}}=(\vv n\!\cdot\!\hat{\bm\rho})/\rho$ (with $\rho$ the distance
+to the axis), and $\kappa_{\text{merid}}=2H-\kappa_{\text{hoop}}$. This is exact (up to fit
+error) on the sphere and prolate spheroid. On a \emph{non-axisymmetric} mesh the
+meridional/hoop split is undefined, so there M1 degrades to the isotropic Young--Laplace
+estimate $\sigma=\Delta p/(2tH)$.
+
+\paragraph{Sphere and ellipsoid --- both methods accurate.} Table~\ref{tab:final} and the
+box plots in Figure~\ref{fig:boxcompare} compare M1, M2 and the analytic reference. M1 is
+essentially exact on both revolutions (it \emph{is} the analytic formula fed measured
+curvature); M2 is within a few percent, showing on the sphere the expected $\sim$4\,\%
+spurious deviatoric ($\sigma_{\max}$ biased high, $\sigma_{\min}$ low --- the genus-0 null
+mode), and on the ellipsoid it recovers the $1.75$ equatorial anisotropy.
+
+\begin{table}[h]\centering
+\begin{tabular}{lccc}
+\toprule
+case & M1 Local $\sigma_{\max}/\sigma_{\min}$ & M2 cMSM $\sigma_{\max}/\sigma_{\min}$ & analytic \\
+\midrule
+sphere        & $200.1/198.6$ (0.1/0.7\%) & $208.9/191.9$ (4.2/4.0\%) & $200/200$ \\
+ellipsoid 2:1 & $313.4/184.4$ (0.2/0.0\%) & $316.7/181.1$ (0.6/4.3\%) & $314.2/184.4$ \\
+\bottomrule
+\end{tabular}
+\caption{Final runs ($\Delta p=20$\,Pa, $t=0.05$, IcoSphere subdiv-5), pole-excluded medians and
+relative errors. M1 (local axisymmetric) is near-exact; M2 (cMSM) is within a few percent.}
+\label{tab:final}
+\end{table}
+
+\begin{figure}[h]\centering
+  \includegraphics[width=\textwidth]{out/final/box_compare.png}
+  \caption{Per-vertex membrane stress on the sphere (top) and prolate ellipsoid (bottom),
+  $\sigma_{\max}$ (left) and $\sigma_{\min}$ (right): Local (M1) vs.\ cMSM (M2) vs.\ Analytical,
+  dashed line = analytic median. On the sphere M1 collapses onto the analytic value while M2
+  straddles it ($\pm$4\,\% spurious deviatoric); on the ellipsoid the box \emph{width} is genuine
+  spatial variation of the stress, and all three medians agree. Produced by \texttt{box\_compare.py}.}
+  \label{fig:boxcompare}
+\end{figure}
+
+\paragraph{HH17 vs.\ HH20 --- the real meshes.} Run on the two chick neural-tube stages (HH17
+decimated to HH20's $3766$ vertices), the cMSM inference gives a clear tensile $\sigma_{\max}$
+and \emph{compressive} $\sigma_{\min}$, both growing from HH17 to HH20
+(Figure~\ref{fig:realbox}): median $\sigma_{\max}$ $2.6\times10^5\to4.8\times10^5$ ($\sim\!1.9\times$)
+and $\sigma_{\min}$ $-1.4\times10^5\to-3.9\times10^5$ ($\sim\!2.8\times$ more compressive) --- HH20
+carries a stronger, more anisotropic field. The local M1 estimate is \emph{unusable} here: the
+isotropic $\sigma=\Delta p/2tH$ blows up wherever the mean curvature passes through zero (flat
+patches, saddles), giving scatter $\sim\!10^7$ and no tension/compression split. This is the
+concrete reason the inference solve (M2) is required on real, non-axisymmetric surfaces.
+
+\begin{figure}[h]\centering
+  \includegraphics[width=\textwidth]{out/final/real_box_compare.png}
+  \caption{HH17 (blue) vs.\ HH20 (orange) per-vertex stress, Local (M1, top) and cMSM (M2,
+  bottom), $\sigma_{\max}$/$\sigma_{\min}$; dashed line = zero. M2 resolves a tensile
+  $\sigma_{\max}$ and compressive $\sigma_{\min}$ that both grow with stage; M1 is isotropic
+  (identical max/min) and pinned near zero. Axes are signed (not floored at 0) because
+  $\sigma_{\min}$ is genuinely compressive. Stress is in Pa, but the magnitude is uncalibrated
+  while $t$ is a placeholder (read patterns, not absolute values). Produced by
+  \texttt{real\_box\_compare.py}.}
+  \label{fig:realbox}
+\end{figure}
+
+\section{Relation to curved Monolayer Stress Microscopy (cMSM)}\label{sec:cmsm}
+
+Our solver is, in physical content, a reimplementation of the cMSM method of
+Mar\'in-Llaurad\'o \emph{et al.}\ (\emph{Mapping mechanical stress in curved epithelia of
+designed size and shape}, Nat.\ Commun.\ 2023; Supplementary Note~2, with the MATLAB code
+released as \texttt{cMSM v1.0.0}, Zenodo \texttt{10.5281/zenodo.7921052}). It is worth
+recording exactly where the two agree and where they differ --- the differences are the
+contribution.
+
+\subsection{The shared physics}
+cMSM models the monolayer as a thin membrane carrying only tangential stress
+$\bm\sigma=\sigma^{ab}\vv e_a\otimes\vv e_b$ on a surface $\vv x=\varphi(\vv\xi)$ with
+covariant basis $\vv e_a=\partial\vv x/\partial\xi^a$, first fundamental form
+$g_{ab}=\vv e_a\!\cdot\!\vv e_b$, and normal $\vv n=(\vv e_1\times\vv e_2)/|\vv e_1\times\vv e_2|$.
+The balance laws are
+\begin{equation}
+  \divs\bm\sigma=\vv0\ \ \text{(tangential)},\qquad
+  \bm\sigma:\bm\kappa=\Delta P\ \ \text{(normal, generalized Young--Laplace)},
+\end{equation}
+combined into the single ambient vector equation (their Eq.~22)
+\begin{equation}
+  \frac{1}{\sqrt g}\bigl(\sqrt g\,\sigma^{ab}\vv e_a\bigr)_{,b}+\Delta P\,\vv n=\vv0,
+  \qquad g=\det g_{ab},
+  \label{eq:cmsm-balance}
+\end{equation}
+which is identical to our Eq.~\eqref{eq:equilibrium}. With three scalar equations and three
+independent stress components, the problem is \emph{statically determinate}: stresses follow
+from shape and pressure alone, with no constitutive law and no stress-free reference. This is
+the property both methods exploit, and the reason the approach suits active epithelia whose
+material model is unknown.
+
+\subsection{Discretization: FEM (cMSM) vs.\ GFDM (here)}
+cMSM discretizes the \emph{weak} form of \eqref{eq:cmsm-balance} with linear triangular
+finite elements (Galerkin, single-point quadrature), giving a square $3N\times3N$ system
+$\mathbf A\vv u=\vv b$ for the nodal components $\vv u=\{\sigma^{11},\sigma^{22},\sigma^{12}\}$.
+We instead discretize the \emph{strong} form with the per-vertex GFDM operators of
+Section~\ref{sec:gfdm}, giving our $\mathbf L\vv S=\vv b$ \eqref{eq:Lsystem}. Two consequences
+matter:
+\begin{itemize}[noitemsep]
+  \item \textbf{Parametrization (open vs.\ closed surfaces).} cMSM needs a \emph{global}
+        surface parametrization (a disc conformal map) to define $\vv e_a$ and interpolate
+        $\bm\sigma$; this exists only for \emph{open} patches with a boundary --- their
+        inflated domes. Supplementary Note~2 explicitly states that closed surfaces would
+        instead require a local elemental parametrization. Our GFDM frames are \emph{local}
+        by construction, so the method applies unchanged to \emph{closed} and
+        arbitrary-topology surfaces --- exactly the chick neural-tube regime
+        (Section~\ref{sec:realmesh}). This is the principal complementarity.
+  \item \textbf{Avoiding connection terms --- same trick, two guises.} Both methods sidestep
+        the Christoffel symbols of $\divs\bm\sigma$ in the balance operator. cMSM interpolates
+        the \emph{whole vector} $\vv s^{b}=\sqrt g\,\sigma^{ab}\vv e_a$ nodally, so the
+        divergence falls only on shape-function derivatives (their Eq.~24); we use ambient
+        Cartesian components, so the derivative falls only on $N_{ab}$ \eqref{eq:divN}. In
+        both, differentiating the embedded basis automatically supplies the normal balance
+        (our Eq.~\eqref{eq:normalproj}), and no $\Gamma^a_{bc}$ enters the operator.
+\end{itemize}
+
+\subsection{Regularization: where we differ most}
+Both discretizations of \eqref{eq:cmsm-balance} are ill-conditioned --- cMSM reports this even
+for a spherical cap, our hourglass modes are the same pathology --- so both regularize, but
+the choices differ:
+\begin{itemize}[noitemsep]
+  \item \textbf{cMSM} \emph{rejects} the zeroth-order (magnitude) Tikhonov term
+        $L_0=\tfrac{\lambda_0^2}{2}\!\int_\Gamma\bm\sigma\!:\!\bm\sigma\,dS$ because it
+        produces sharp tension gradients, and instead uses two \emph{first-order}
+        (covariant-derivative) penalties --- a gradient-of-trace term and a curl term,
+        \begin{equation}
+          L_{1t}=\frac{\lambda_t^2}{2}\!\int_\Gamma\!\nabla\!\operatorname{tr}\bm\sigma\cdot
+                  \nabla\!\operatorname{tr}\bm\sigma\,dS,
+          \qquad
+          L_{1c}=\frac{\lambda_c^2}{2}\!\int_\Gamma\!\operatorname{curl}\bm\sigma:
+                  \operatorname{curl}\bm\sigma\,dS,
+        \end{equation}
+        which \emph{do} require Christoffel symbols (the only place they appear in their code).
+        $\lambda_t$ sets a tension-gradient length scale, chosen at the L-curve corner / where
+        the residual starts to climb.
+  \item \textbf{Here} we use the Tikhonov roughness penalty \eqref{eq:tikhonov} plus a
+        Laplacian (umbrella) post-smoothing of the recovered field
+        (Section~\ref{sec:results}). This is simpler but less principled: the curl penalty
+        $L_{1c}$ targets precisely the rotational (``swirl'') near-null mode that our smoothing
+        only mops up afterwards, and is the most likely \emph{structural} cure for the
+        hourglass lines.
+\end{itemize}
+A further cMSM ingredient we do not yet use is the per-node \emph{positivity} constraint
+$\det\bm\sigma=\sigma^{11}\sigma^{22}-(\sigma^{12})^2>0$ (no negative principal tension),
+imposed by nonlinear optimization (\texttt{fmincon}) for their experimental data. It is a
+cheap, physically-motivated safeguard for noisy real meshes such as HH17/HH20, where our raw
+$\sigma_{\min}$ currently goes spuriously compressive (Section~\ref{sec:realmesh}).
+
+\subsection{Validation and the hyperelastic cross-check}
+cMSM is validated against (i) the closed-form axisymmetric solution
+$\sigma_1=\Delta P/2\kappa_2$, $\sigma_2=(\Delta P/\kappa_2)(1-\kappa_1/2\kappa_2)$ --- the
+same references we use in Section~3 --- and (ii) a genuinely non-axisymmetric case: a
+neo-Hookean membrane inflated by a forward finite-element solve, on which the inverse recovers
+$\bm\sigma$ to $\sim$3\,\%. We adopt the same idea for our own hyperelastic cross-check
+(method M3, Section~\ref{sec:final}), but \textbf{we run our own neo-Hookean FEM
+simulations} rather than reuse the archived cMSM fields: we inflate \emph{our} geometries
+(sphere, prolate ellipsoid, and the neural-tube meshes) with a forward FE solve at the project
+pressure $\Delta P=20$\,Pa and compare the FE $\sigma_1,\sigma_2$ against the GFDM inference.
+Running our own forward model is necessary so the reference configuration, material, boundary
+conditions, mesh, and pressure all match the inputs of the inference --- a controlled
+comparison the external dataset cannot provide (its geometries, material parameters, and
+$400$\,Pa loading differ from ours). This FE cross-check is still to be built.
+
+\begin{table}[h]\centering\small
+\begin{tabular}{lll}
+\toprule
+ & cMSM (Mar\'in-Llaurad\'o \emph{et al.}) & This work (GFDM) \\
+\midrule
+Governing PDE     & $\divs\bm\sigma=0,\ \bm\sigma:\bm\kappa=\Delta P$ & identical \eqref{eq:equilibrium} \\
+Determinacy       & constitutive-free, statically determinate & identical \\
+Discretization    & linear-triangle FEM, Galerkin, 1-pt quad. & per-vertex WLS GFDM (strong form) \\
+Parametrization   & \textbf{global} conformal map (open only) & \textbf{local} per-vertex frame (closed OK) \\
+Stress DOFs       & $\sigma^{ab}$ in nodal $(\vv e_1,\vv e_2)$ & $(p,q,r)$ in $(\vv v_1,\vv v_2)$ \\
+Connection terms  & absorbed via $\vv s^b=\sqrt g\,\sigma^{ab}\vv e_a$ & absorbed via ambient components \\
+Regularization    & 1st-order grad-trace $+$ curl (covariant) & Tikhonov roughness $+$ Laplacian smoothing \\
+Positivity        & $\det\bm\sigma>0$ (\texttt{fmincon}) & not imposed (yet) \\
+Solver            & \texttt{quadprog}\,/\,\texttt{fmincon} & sparse \texttt{LU}\,/\,\texttt{lsqr} \\
+Validation        & axisym.\ closed form $+$ neo-Hookean FE & axisym.\ closed form (neo-Hookean planned) \\
+\bottomrule
+\end{tabular}
+\caption{Side-by-side of the reference cMSM method and the present GFDM solver. The physics is
+shared; the discretization, the parametrization (which decides open vs.\ closed surfaces), and
+the regularization differ.}
+\label{tab:cmsm}
+\end{table}
+
+\subsection{Experiment: their regularization vs.\ our smoothing}\label{sec:regcompare}
+
+Because cMSM documents that the zeroth-order Tikhonov term produces sharp gradients and
+advocates the first-order grad-trace $+$ curl penalty instead, we tested whether adopting
+their regularization removes the hourglass lines on our \emph{closed} surfaces without any
+post-smoothing. We ported both penalties into the GFDM solver (\texttt{reg\_compare.py}). The
+translation is clean: the surface covariant derivative of the tangential tensor equals the
+local-frame sandwich of the ambient-component derivatives,
+\begin{equation}
+  \nabla_\alpha N_{\beta\gamma}=(v_\beta)_a(v_\gamma)_b\,(G_\alpha N_{ab}),
+\end{equation}
+so $\nabla_s\!\operatorname{tr}\NN=\nabla_s(p+q)$ gives $L_{1t}$ and the covariant gradient of
+the components gives $L_{1c}$ (in 2D the curl penalty equals the full covariant-gradient norm),
+with no Christoffel symbols and only the existing $G_\xi,G_\eta$. We then solve
+$(\mathbf L^{\!\top}\mathbf L+\lambda_t^2 Q_t+\lambda_c^2 Q_c)\vv S=\mathbf L^{\!\top}\vv b$ and
+\emph{omit} the Laplacian pass.
+
+\paragraph{Result --- on closed surfaces their regularization does not help.}
+Table~\ref{tab:regcompare} and Figure~\ref{fig:regcompare} compare, on the same sphere and
+spheroid: our Tikhonov solve before smoothing, our Tikhonov $+$ Laplacian (current method), and
+the cMSM grad-trace $+$ curl solve (no smoothing). As a \emph{pure regularizer} the cMSM penalty
+is no better than plain Tikhonov --- the sphere $\sigma_{\max}$ scatter stays at std $\approx0.69$
+and the spheroid meridional error stays $\sim$30--40\,\% --- and an $L$-curve-style sweep of
+$\lambda_t,\lambda_c$ over two decades plateaus the spurious anisotropy at $\sim$10\,\% while the
+residual climbs. The Laplacian post-smoothing, by contrast, cuts the sphere scatter
+$4.5\times$ (std $0.69\to0.15$) and the spheroid meridional error nearly $4\times$
+($30\%\to8\%$), and it dominates regardless of which regularizer precedes it
+(cMSM $+$ Laplacian $\approx$ Tikhonov $+$ Laplacian: std $0.16$ vs.\ $0.15$, $\sigma_{\min}$
+error $10\%$ vs.\ $8\%$).
+
+\paragraph{Why.} The closed-surface near-null mode tracks the \emph{icosahedral triangulation
+pattern} --- a relatively low-wavenumber feature --- so a first-order gradient penalty cannot
+crush it without also flattening the genuine (low-wavenumber) stress gradient. cMSM's penalty
+works on their domes because those are \emph{open} surfaces with a pinned basal boundary, and it
+is the boundary condition that suppresses the null modes; a closed surface has no such boundary.
+The mesh-scale low-pass character of umbrella smoothing is what actually targets the icosahedral
+mode. \textbf{Conclusion:} adopting cMSM's regularization would not improve our closed-surface
+solve; the Laplacian post-smoothing is both necessary and sufficient, which retroactively
+justifies the current pipeline (Section~\ref{sec:results}) as the right choice, not merely an
+expedient one.
+
+\begin{table}[h]\centering
+\begin{tabular}{llccc}
+\toprule
+case & metric & Tikhonov raw & \textbf{Tikhonov $+$ Laplacian} & cMSM reg (no smooth) \\
+\midrule
+sphere   & $\sigma_{\max}$ std (scatter)   & $0.69$ & $\mathbf{0.15}$ & $0.69$ \\
+         & spurious anisotropy            & $11\%$ & $11\%$          & $12\%$ \\
+spheroid & $\sigma_{\min}$ (merid.) error & $30\%$ & $\mathbf{8\%}$  & $38\%$ \\
+         & $\sigma_{\max}$ std             & $2.44$ & $\mathbf{1.90}$ & $2.75$ \\
+\bottomrule
+\end{tabular}
+\caption{Regularization comparison on the analytic cases ($\Delta p=1$, $t=0.05$, IcoSphere
+subdiv\,4, depth\,3; cMSM $\lambda_t=\lambda_c=0.05$). The cMSM first-order penalty performs like
+our \emph{raw} Tikhonov; the Laplacian smoothing is what removes the lines. Produced by
+\texttt{reg\_compare.py}.}
+\label{tab:regcompare}
+\end{table}
+
+\begin{figure}[h]\centering
+  \includegraphics[width=\textwidth]{out/reg_compare.png}
+  \caption{$\sigma_{\max}$ under three treatments (columns): our Tikhonov solve before smoothing
+  (left), Tikhonov $+$ Laplacian smoothing (centre, current method), and the cMSM grad-trace $+$
+  curl regularization with no smoothing (right). Top: sphere; bottom: prolate spheroid
+  ($\times2$), per-row colour scale. The icosahedral lines vanish only in the Laplacian column;
+  the cMSM column is as streaky as the raw solve, on both surfaces. Produced by
+  \texttt{reg\_compare.py}.}
+  \label{fig:regcompare}
+\end{figure}
+
+\section{The Beltrami stress-function formulation}\label{sec:beltrami}
+
+Laplacian smoothing cures the symptom; the root cause is that solving for the stress
+components \emph{directly} leaves the homogeneous equilibrium $\divs\NN=\vv0$ underdetermined,
+which admits the spurious near-null modes. The Beltrami / Airy stress-function approach attacks
+the source: the unknown becomes a single scalar potential $\Phi$, which has no tensor null
+space.
+
+\paragraph{Two curved-surface subtleties.} The clean flat-2D story --- write
+$\sigma_{xx}=\Phi_{,yy}$, $\sigma_{yy}=\Phi_{,xx}$, $\sigma_{xy}=-\Phi_{,xy}$ so that
+$\nabla\!\cdot\!\bm\sigma\equiv0$ --- does \emph{not} carry over unchanged:
+\begin{enumerate}[noitemsep]
+  \item On a curved surface $\divs\NN(\Phi)\propto K\,\nabla_s\Phi$ (Gaussian-curvature
+        coupling), so the Airy stress is not exactly divergence-free.
+  \item The Airy construction can only represent \emph{self-equilibrated} stress; on a closed
+        surface it cannot carry the pressure load (on the sphere it would force the net load to
+        zero). The stress must therefore split into a particular part plus the Airy correction:
+        \begin{equation}
+          \NN = \underbrace{\frac{\Delta p}{\operatorname{tr}\mathrm{I\!I}}\,\mathbf g}_{\NN_p\ \text{(isotropic, }\NN_p:\mathrm{I\!I}=\Delta p\text{)}}
+              \;+\; \underbrace{\operatorname{cof}(\operatorname{Hess}_s\Phi)}_{\NN_{\text{Airy}}}.
+        \end{equation}
+\end{enumerate}
+In the local frame the Airy stress is simply the cofactor of the surface Hessian,
+$N_{11}=\Phi_{,\eta\eta}$, $N_{22}=\Phi_{,\xi\xi}$, $N_{12}=-\Phi_{,\xi\eta}$, which the GFDM
+quadratic fit yields directly. We find $\Phi$ by least squares so the \emph{total} $\NN$
+satisfies tangential equilibrium while $\NN_{\text{Airy}}:\mathrm{I\!I}=0$ preserves the normal
+balance; $\mathrm{I\!I}$ comes from the Weingarten map $-\nabla_s\nn$. Implemented in
+\texttt{membrane\_stress\_beltrami.py} (sparse \texttt{scipy}, second-derivative GFDM operators
+added to \texttt{surface\_fd.py}).
+
+\paragraph{Results --- it removes the lines, at an accuracy cost.}
+The scalar-field solve is structurally smooth: on the sphere the $\sigma_{\max}$ scatter drops
+to std $\approx0.16$--$0.30$ (vs $0.69$ for the direct solve) \emph{with no smoothing applied},
+and the icosahedral streaks are gone (Figure~\ref{fig:beltrami}). The mean stress is recovered
+($\sigma\approx10=\Delta pR/2t$ on the sphere; spheroid $\sigma_{\max}\approx15.5$ vs analytic
+$15.7$). However, with the present single-scalar ansatz and third-order GFDM operators the
+tangential equilibrium is not well satisfied on the spheroid (residual $\sim0.9$), so the
+\emph{anisotropy is under-predicted}: $\sigma_{\min}\approx12.5$ against the analytic $9.2$
+($\sim$40\,\%). Lowering the normal-preservation weight $w_n$ recovers more anisotropy but
+reintroduces noise; $w_n\approx1$ is the best compromise.
+
+\begin{figure}[h]\centering
+  \includegraphics[width=\textwidth]{out/beltrami_wn1.png}
+  \caption{$\sigma_{\max}$ from the Beltrami stress-function solve (icosphere subdiv\,4,
+  $w_n{=}1$), shared scale $6$--$23$. The streaky lines of the direct solve
+  (Figure~\ref{fig:stress}) are gone \emph{without} any post-smoothing --- the sphere is nearly
+  uniform and the spheroid hoop band is smooth. The single-scalar ansatz currently
+  under-predicts the spheroid anisotropy (see text). Produced by
+  \texttt{membrane\_stress\_beltrami.py}.}
+  \label{fig:beltrami}
+\end{figure}
+
+\paragraph{Verdict and outlook.} Beltrami removes the artifact at the source (no smoothing),
+confirming the diagnosis that the lines are a tensor-null-space effect. For \emph{accurate}
+anisotropy today, the \textbf{direct solve plus Laplacian smoothing} (Section~\ref{sec:results})
+remains the best practical method. Closing the accuracy gap is the next step: higher-order /
+better-conditioned surface operators for the third-order term, a proper handling of the
+$K\nabla_s\Phi$ coupling, or resolving the over-determination (1 scalar vs 3 residual
+equations) with a consistent weighting or a two-potential (Gauss--Codazzi) representation.
+
+\end{document}

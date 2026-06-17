@@ -1,0 +1,33 @@
+# Editor / tooling local config
+.claude/
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.bbl
+*.blg
+
+# Compiled documents (build from the .tex sources)
+*.pdf
+
+# Generated outputs (regenerate by running the scripts)
+out/
+
+# Input meshes (local-only; see the Data note in README.md)
+*.vtk
+
+# External reference archive (fetch from Zenodo 10.5281/zenodo.7921052)
+cMSM_ref/
+*.zip

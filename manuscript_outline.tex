@@ -1,0 +1,372 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{bm}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue]{hyperref}
+
+% lightweight "outline note" callout (our own style; not copied from the reference)
+\newcommand{\onote}[1]{\par\smallskip{\small\color{gray!75!black}\textit{[Outline note: #1]}}\par\smallskip}
+\newcommand{\sig}{\bm{\sigma}}
+\newcommand{\NN}{\mathbf{N}}
+\newcommand{\nn}{\bm{n}}
+\newcommand{\divs}{\nabla_{\!s}\!\cdot}
+\newcommand{\thk}{t(\mathbf{X})}
+\newcommand{\dsig}{\Delta\sigma_{\perp}}      % transmural (apical-basal) stress gradient
+\newcommand{\tor}{t/r}                          % thickness-to-radius ratio
+% inline citation placeholder (distinct from outline notes)
+\newcommand{\citeneed}[1]{{\small\color{blue!55!black}\textsc{[cite:\,#1]}}}
+
+\title{\bfseries Thickness-Driven Stress Dissipation and the Role of Bending\\
+in the Expanding Chick Cranial Neural Tube\\[4pt]
+\large a multi-fidelity (geometric / membrane / 3D-continuum) stress-inference framework}
+\author{Manuscript outline --- draft (mechanics-first reframing)}
+\date{2026-06-16}
+
+\begin{document}
+\maketitle
+
+\begin{center}\small
+\emph{Geometry / curvature pipeline:} Chahare, Imamura \& Nerurkar (2026), spatchcocking.\quad
+\emph{Membrane inference (CMSM):} Mar\'in-Llaurad\'o et al.\ (2023), \textit{Nat.\ Commun.}\\
+\emph{This work:} surface GFDM membrane solve (\texttt{scipy.sparse}) $+$ our own 3D neo-Hookean FEM.
+\end{center}
+
+\onote{\textbf{Title options} (pick by venue): \emph{Mechanics-first} --- ``The Role of
+Heterogeneous Tissue Thickness in Dissipating Mechanical Stress during Active Morphogenesis'';
+\emph{Methodological} --- ``Beyond Membrane Approximations: A 3D Continuum Framework for Stress
+Inference in Thick-Walled Embryonic Shells''; \emph{Integrated} (current title) --- thickness
+dissipation $+$ bending in the chick cranial neural tube.}
+
+\onote{\textbf{Status legend used below:} \textsc{done} = implemented and run in this repo;
+\textsc{partial} = implemented, awaiting inputs; \textsc{todo} = not yet built. Model A
+(Local) and Model B (CMSM) are \textsc{done} on sphere/ellipsoid and HH17/HH20; Model C (3D
+FEM), the measured thickness field, and the pHH3 dataset are \textsc{todo}.}
+
+\tableofcontents
+\bigskip
+\hrule
+
+%====================================================================
+\section{Abstract}
+\onote{$\sim$200 words; fill numbers once the FEM (Model C), the measured thickness field, and
+the pHH3 integration are final. Target message below.}
+
+The embryonic neural tube is usually modelled as a pressurized thin membrane, yet as it
+expands its wall is neither thin nor uniform. We argue that the dorsoventral (DV)
+\emph{thickness gradient} of the cranial neural tube is a mechanical design feature that
+\textbf{dissipates} peak in-plane stress and sets the distribution of \emph{bending} moments
+that thin-shell inference cannot see. We build a multi-fidelity stress-inference framework on
+specimen-specific geometry: \textbf{(A)} a geometric estimate from mean curvature, \textbf{(B)}
+constitutive-free membrane inference (curved Monolayer Stress Microscopy, CMSM, via a surface
+generalized-finite-difference solve), and \textbf{(C)} a 3D neo-Hookean hyperelastic
+finite-element model that resolves the through-thickness (transmural) stress. Comparing uniform
+against experimentally derived thickness, we show that (i) the membrane and curvature proxies
+break down as the thickness-to-radius ratio $\tor$ grows, systematically missing the transmural
+gradient $\dsig$; (ii) the real DV thickness gradient reduces the spatial \emph{variance} of
+principal stress relative to a uniform wall---i.e.\ the tissue dissipates stress peaks; and
+(iii) bending becomes a dominant component of the structural response as the wall thickens.
+Mapping the computed stress/bending fields onto pHH3$^+$ mitotic density places cell division
+within a mechanically dissipated landscape. \textbf{[Key numbers TBD.]}
+
+%====================================================================
+\section{Introduction}
+
+\paragraph{The physics of morphogenesis.} The early cranial neural tube is a fluid-filled
+epithelial shell; secreted cerebrospinal fluid pressurizes the lumen and is thought to drive
+neuroepithelial expansion and, via mechanotransduction,
+proliferation~\citeneed{eCSF pressure \& mechanotransduction; Desmond \& Jacobson; Garcia et al.}.
+Mechanically it is a \emph{pressurized, thick-walled shell} undergoing large, regionally
+non-uniform growth.
+
+\paragraph{The limitation of thin-shell inference.} Local mean-curvature estimates
+($\sigma\!\propto\!1/H$, Laplace law) and curved Monolayer Stress Microscopy
+(CMSM)~\citeneed{Mar\'in-Llaurad\'o et al.\ 2023} are powerful
+on \emph{thin} membranes, but they share a structural blind spot: both assume the stress is
+uniform through the wall, so they return only the in-plane resultant and \textbf{cannot
+represent the transmural (apical--basal) stress gradient $\dsig$}---i.e.\ bending. As the wall
+thickness becomes a non-negligible fraction of the local radius of curvature, the membrane
+assumption errs at $O((\tor)^2)$~\citeneed{thin-shell / Koiter shell theory}, and worst of all
+exactly where the geometry is most biologically interesting (constrained boundaries, saddle
+regions, $K<0$).
+
+\paragraph{The thesis.} The embryo does not grow as a uniform-thickness shell. We hypothesize
+that the observed DV thickness gradient is a physical adaptation---a \emph{mechanical
+buffer}---that \textbf{dissipates peak stresses} and manages the distribution of bending
+moments induced by localized growth. Thickness is therefore not a nuisance constant but a
+\emph{morphogenetic design variable}.
+
+\paragraph{Scope.} We develop a rigorous multi-fidelity framework---geometric (A), membrane (B),
+and 3D hyperelastic continuum (C)---and use it to quantify how thickness geometry dictates
+stress management. We deliberately keep the in-plane reduction to the two principal stresses
+$(\sigma_1,\sigma_2)$ and their anisotropy, and add the one quantity the membrane methods
+cannot provide: the transmural gradient $\dsig$ (bending).
+\onote{Honest framing point that makes the paper's logic airtight: because A and B are
+statically determinate membrane methods, thickness enters them only as the divisor
+$\sigma=\NN/t$ (the resultant $\NN$ is thickness-independent). Hence \emph{the dissipation and
+bending results structurally require Model C}---this is precisely why the 3D continuum step is
+necessary, not optional.}
+
+%====================================================================
+\section{Methodology: a multi-fidelity stress-inference framework}
+
+\subsection{The benchmark models}
+\begin{table}[h]\centering\small
+\begin{tabular}{llll}
+\toprule
+ & \textbf{Model A --- Local} & \textbf{Model B --- Membrane (CMSM)} & \textbf{Model C --- Continuum} \\
+\midrule
+Fidelity        & geometric proxy            & constitutive-free force balance     & 3D hyperelastic FEM \\
+Unknown         & ---                        & tangential resultant $\NN$ (3 DOF/vert) & displacement $\bm u$ \\
+Stress from     & mean curvature $H$         & $\divs\NN+\Delta p\,\nn=\bm0$        & neo-Hookean $\psi(\bm F)$ \\
+Reference cfg.  & none                       & none                                & required (stress-free) \\
+Transmural $\dsig$ (bending) & \textbf{no}   & \textbf{no}                         & \textbf{yes} \\
+Thickness role  & divisor $\Delta p/2Ht$     & divisor $\sigma=\NN/t$              & geometric (extruded volume) \\
+Repo status     & \textsc{done} (\texttt{local\_stress.py}) & \textsc{done} (\texttt{membrane\_stress\_fd.py}) & \textsc{todo} \\
+Cost            & instant                    & seconds                             & minutes \\
+\bottomrule
+\end{tabular}
+\caption{Three models of increasing fidelity. A and B are thin-shell (no bending); only the 3D
+continuum C resolves the transmural gradient $\dsig$ that this paper argues is essential.}
+\label{tab:models}
+\end{table}
+
+\paragraph{Model A --- Local (mean curvature).} Curvature-only estimate with no equilibrium
+solve; per-vertex curvature from a local degree-2 surface fit~\citeneed{spatchcocking; Chahare
+et al.; vedo}. On a surface of revolution, the two-curvature pressure-vessel relations give
+$\sigma_{\text{merid}}=\Delta p\,r_{\text{hoop}}/2t$ and
+$\sigma_{\text{hoop}}=\Delta p\,r_{\text{hoop}}/t\,(1-r_{\text{hoop}}/2r_{\text{merid}})$ from
+the measured curvature; on an arbitrary surface it degrades to the isotropic Laplace value
+$\sigma=\Delta p/2Ht$. \onote{\textsc{done}: \texttt{local\_stress.py}; near-exact on
+sphere/ellipsoid, but $1/H$ blows up on irregular meshes---an explicit demonstration of the
+proxy's fragility.}
+
+\paragraph{Model B --- Membrane (CMSM).} The tangential resultant $\NN$ ($\NN\nn=\bm0$)
+satisfies the single ambient vector equation $\divs\NN+\Delta p\,\nn=\bm0$, whose normal
+component is the Laplace law $\sigma_1\kappa_1+\sigma_2\kappa_2=\Delta p/t$. We discretize the
+strong form by a per-vertex weighted-least-squares quadratic fit (GFDM operators
+$G_\xi,G_\eta$), three DOF per vertex, solve the Tikhonov-regularized sparse system, and apply
+a light Laplacian smoothing. This is a local-frame, closed-surface generalization of CMSM (the
+reference method uses a globally parametrized FE membrane, open domes only).
+\onote{\textsc{done}: \texttt{membrane\_stress\_fd.py} $+$ smoothing; validated on
+sphere/spheroid (working notes).}
+
+\paragraph{Model C --- Continuum (3D neo-Hookean FEM).} \emph{Our own} forward
+finite-element model: each surface triangle is extruded inward along vertex normals by the
+local thickness to wedge/prism elements; the luminal face carries the pressure $P$ as a
+follower load, the outer face is traction-free; nearly-incompressible neo-Hookean
+material~\citeneed{neo-Hookean hyperelasticity; Ogden; Holzapfel};
+Newton solve. Outputs the full 3D stress, from which we extract both the membrane resultants
+($\sigma_1,\sigma_2$) \emph{and} the transmural gradient $\dsig$.
+\onote{\textsc{todo}. Run at the project pressure $\Delta P=20$\,Pa. Do NOT reuse the archived
+cMSM \texttt{.mat} fields---their geometry, material, and 400\,Pa loading differ from ours, so
+they are not a valid ground truth; the forward model must match our inference inputs.}
+
+\subsection{The ``dissipation'' experiment}
+For each geometry we run \emph{uniform thickness} (control) vs.\ \emph{experimentally derived
+thickness} $\thk$, holding pressure fixed ($\Delta P=20$\,Pa), and compare the resulting stress
+fields---specifically the spatial \emph{variance} of the principal stresses.
+\onote{Key subtlety to state plainly: for A and B, $\NN$ is thickness-independent, so changing
+$t$ only rescales the field by $1/\thk$ (no genuine redistribution). The \emph{mechanical}
+dissipation---thinner regions straining more, bending moments redistributing load---appears in
+Model C, where thickness enters the geometry and constitutive response. The uniform-vs-measured
+contrast is thus primarily a \textbf{Model C} result, with A/B as the thin-shell baseline that
+\emph{cannot} show it.}
+
+\subsection{Bending-stress integration: the transmural gradient}
+From Model C we compute the through-thickness stress profile at each surface point and define
+the transmural gradient $\dsig=\sigma_{\text{apical}}-\sigma_{\text{basal}}$ (and the associated
+bending moment per unit length). This is identically zero in A and B by construction; the
+magnitude of $\dsig$ relative to the mean in-plane stress is the quantitative measure of ``how
+much bending is being missed'' by the thin-shell methods.
+
+\subsection{Bio-integration: pHH3$^+$ mitotic data}
+Register the pHH3$^+$ mitotic-density map~\citeneed{pHH3 morphometry dataset; this lab} (same
+specimen frame as the morphometry) onto the computed stress and bending-energy fields to test
+whether proliferation hot-spots sit in mechanically dissipated (low-variance) regions.
+\onote{\textsc{todo}: needs the pHH3 dataset and a common coordinate frame with the meshes.}
+
+%====================================================================
+\section{Results: the mechanical significance of thickness}
+
+\subsection{R0 --- Framework validation (A vs.\ B vs.\ analytic)}
+On the sphere and prolate ellipsoid, Model A (local axisymmetric) is near-exact and Model B
+(CMSM) is within a few percent, recovering the $1.75$ equatorial anisotropy
+(Fig.~\ref{fig:box}). This anchors the thin-shell tier before the continuum comparison.
+
+\begin{figure}[h]\centering
+  \includegraphics[width=\textwidth]{out/final/box_compare.png}
+  \caption{Validation of the thin-shell tier: per-vertex $\sigma_{\max}/\sigma_{\min}$ on the
+  sphere (top) and prolate ellipsoid (bottom), Model A (Local) vs.\ Model B (CMSM) vs.\
+  analytical. A collapses onto the analytic value; B straddles it (sphere shows the $\sim$4\,\%
+  spurious-deviatoric discretization scatter); both recover the ellipsoid anisotropy. Produced
+  by \texttt{box\_compare.py} ($\Delta P=20$\,Pa).}
+  \label{fig:box}
+\end{figure}
+
+\subsection{R1 --- Breakdown of thin-shell approximations}
+\onote{\textsc{todo} (needs Model C). Plot the error $\|\sigma^{B}-\sigma^{C}\|/\|\sigma^{C}\|$
+vs.\ the thickness-to-radius ratio $\tor$, on controlled ellipsoids and on the neural tube.}
+\emph{Expected:} membrane error grows $\sim(\tor)^2$; curvature/CMSM specifically
+\textbf{underestimate tension at constrained boundaries} and fail where $K<0$. Identify the
+$\tor$ threshold beyond which the thin-shell picture is quantitatively wrong.
+
+\subsection{R2 --- Thickness as a stress-dissipation mechanism}
+\onote{\textsc{partial/todo}: needs the measured $\thk$ and Model C. Compare the stress
+landscape of uniform-thickness shells vs.\ the real DV thickness variation.}
+\textbf{Key finding (hypothesized):} the real biological thickness gradient \emph{reduces the
+spatial variance} of the principal stresses relative to a uniform-thickness wall---the tissue
+``dissipates'' potential stress peaks. Report variance/peak-stress reduction and where the
+buffering is strongest along the DV axis.
+
+\subsection{R3 --- The dominance of bending stresses}
+\onote{\textsc{todo} (Model C). Transmural (apical--basal) stress profiles; show $\dsig$ growing
+with wall thickness.}
+\emph{Expected:} as the neural tube thickens, the bending component $\dsig$ becomes a dominant
+part of the structural response; bending moments generated by regional thickness differences
+redistribute force across the neuroepithelium---an effect entirely invisible to A and B.
+
+\subsection{R4 --- Preliminary stress on the real meshes (Model B), HH17 vs.\ HH20}
+The membrane solve already runs on both stages. It resolves a tensile $\sigma_{\max}$ and a
+\emph{compressive} $\sigma_{\min}$, both increasing from HH17 to HH20 (median $\sigma_{\max}$
+$\sim$1.9$\times$, $\sigma_{\min}$ $\sim$2.8$\times$ more compressive;
+Fig.~\ref{fig:realbox}), indicating a stronger, more anisotropic field at the later stage.
+Magnitudes are uncalibrated (placeholder $t$); the pattern is the result.
+
+\begin{figure}[h]\centering
+  \includegraphics[width=0.92\textwidth]{out/final/real_box_compare.png}
+  \caption{HH17 vs.\ HH20 per-vertex membrane stress (Model A top, Model B bottom;
+  $\sigma_{\max}$/$\sigma_{\min}$). Model B resolves tension ($\sigma_{\max}>0$) and compression
+  ($\sigma_{\min}<0$), both growing with stage; Model A (isotropic on real meshes) is pinned
+  near zero and cannot resolve the split. Stress in Pa, magnitude uncalibrated (placeholder
+  $t$). Produced by \texttt{real\_box\_compare.py}.}
+  \label{fig:realbox}
+\end{figure}
+
+\begin{figure}[h]\centering
+  \includegraphics[width=\textwidth]{out/HH_smoothed_view.png}
+  \caption{Laplacian-smoothed maximum principal membrane stress $\sigma_{\max}$ (Model B) on
+  HH17 (left) and HH20 (right), $\Delta P=20$\,Pa. Per-mesh colour scale; preliminary
+  (placeholder $t$). The continuum model (C) and the thickness experiment will be overlaid on
+  this same geometry.}
+  \label{fig:hhmaps}
+\end{figure}
+
+\subsection{R5 --- Integration with mitotic activity (pHH3$^+$)}
+\onote{\textsc{todo}: needs pHH3 data + Model C fields.}
+Map the FEM principal-stress and bending-energy fields onto the pHH3$^+$ mitotic-density map.
+\textbf{The mechanical--proliferative correlation:} quantify whether cell division localizes to
+mechanically dissipated (low-variance) regions---a coordinated environment in which tissue
+architecture (thickness) sets where cells divide safely under expansion pressure.
+
+%====================================================================
+\section{Discussion: the mechanics of design}
+
+\paragraph{Thickness as a morphogenetic design principle.} The embryo is not merely responding
+to pressure; it appears to thicken specific regions to \emph{tune} its structural mechanics,
+buffering stress peaks where growth is fastest.
+
+\paragraph{Why bending matters.} The transition from thin-membrane to thick-walled shell
+mechanics is the crux: bending stresses ($\dsig$) are what let the tube retain shape through
+its $\sim$10-fold expansion, and they are exactly what curvature and CMSM omit.
+
+\paragraph{Stress-inference guidelines (a ``mechanics decision tree'').} Offer the community a
+practical rule: membrane inference (B) suffices when $\tor$ is small and $K>0$; 3D continuum
+(C) is required when $\tor\gtrsim0.05$ or $K<0$, where the bending--stress interplay dominates.
+\onote{State the threshold as a calibrated result from R1, not a guess.}
+
+\paragraph{Closing on biology --- mechanical homeostasis.} Frame the pHH3 correlation as
+\emph{mechanical homeostasis}: the tissue manages stress through thickness, and this dissipated
+environment then facilitates the observed proliferation pattern---i.e.\ the tube
+\emph{pre-patterns} its thickness to keep the neuroepithelium stable during its most rapid
+growth.
+
+\paragraph{Limitations.} Membrane error $O((\tor)^2)$; uncertain neo-Hookean parameters
+(report vs.\ sweeps); pressure from literature; single specimen per stage; decimation of HH17;
+thickness-field provenance.
+
+%====================================================================
+\section{Conclusion}
+\onote{$\sim$1 paragraph; mirror the abstract's claims once results are final.}
+We show that tissue \emph{thickness} is a first-class mechanical variable in the developing
+neural tube: it dissipates peak in-plane stress (reducing principal-stress variance) and sets
+the transmural gradient $\dsig$ that governs bending. Because the thin-shell methods (geometric
+A, membrane B) cannot represent $\dsig$, accurate developmental stress estimation in
+thick-walled, non-uniform shells requires the 3D continuum model (C). The framework yields a
+practical decision rule ($\tor$, sign of $K$) for when membrane inference is adequate, and
+places the observed pHH3$^+$ proliferation pattern within a mechanically dissipated landscape
+consistent with mechanical homeostasis.
+
+%====================================================================
+\bigskip\hrule\smallskip
+\onote{The remaining sections (figures plan, implementation milestones, open decisions) are
+\emph{authoring scaffolding}, not part of the manuscript body --- to be removed before submission.}
+
+\section{Figures plan}
+\begin{table}[h]\centering\small
+\begin{tabular}{lll}
+\toprule
+\textbf{Fig.} & \textbf{Content} & \textbf{Status} \\
+\midrule
+1 & Framework schematic: Models A/B/C; where bending ($\dsig$) enters only in C. & \textsc{todo} \\
+2 & Validation: A vs.\ B vs.\ analytic (sphere/ellipsoid box plots). & \textsc{done} (\texttt{box\_compare.py}) \\
+3 & Thin-shell breakdown: $\|\sigma^B-\sigma^C\|$ vs.\ $\tor$; underestimation at boundaries. & \textsc{todo} (needs C) \\
+4 & Dissipation: uniform vs.\ measured $\thk$ stress maps $+$ variance reduction $+$ DV profiles. & \textsc{todo} \\
+5 & Bending: transmural $\dsig$ profiles vs.\ thickness. & \textsc{todo} (needs C) \\
+6 & HH17 vs.\ HH20 membrane stress (maps $+$ box plots). & \textsc{done} (\texttt{real\_box\_compare.py}, \texttt{HH\_smoothed\_view.png}) \\
+7 & pHH3$^+$ overlay: stress/bending-energy vs.\ mitotic density. & \textsc{todo} \\
+S & Method validation details; mesh-quality; parameter sweeps. & partial \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+%====================================================================
+\section{Implementation plan and milestones}
+\begin{description}[leftmargin=1.4em,style=nextline]
+  \item[Phase 1 --- \textsc{done}] Curvature/frame pipeline; GFDM operators; Model A (Local)
+        and Model B (CMSM membrane) with Laplacian smoothing; sphere/spheroid validation; HH17
+        (decimated) and HH20 runs; A-vs-B-vs-analytic and HH17-vs-HH20 box plots.
+  \item[Phase 2 --- next] \textbf{Model C}: solid-shell extrusion $+$ neo-Hookean forward FE at
+        $\Delta P=20$\,Pa; validate on a Lam\'e thick-sphere (linear) and a Rivlin inflated
+        sphere (hyperelastic)~\citeneed{Lam\'e; Rivlin 1948}; extract $\sigma_1,\sigma_2$
+        \emph{and} the transmural gradient $\dsig$.
+  \item[Phase 3] Thickness field $\thk$ (measured / curvature-correlated / synthetic DV
+        gradient as placeholder); run the dissipation experiment (R2) and bending analysis (R3)
+        on sphere, ellipsoid, and HH17/HH20.
+  \item[Phase 4] $\tor$ breakdown study (R1) on controlled ellipsoids; the mechanics decision
+        tree; sensitivity sweeps.
+  \item[Phase 5] pHH3$^+$ registration and correlation (R5); writing and figures.
+\end{description}
+
+%====================================================================
+\section{Key open decisions}
+\begin{table}[h]\centering\small
+\begin{tabular}{lll}
+\toprule
+\textbf{Decision} & \textbf{Options} & \textbf{Leaning} \\
+\midrule
+Thickness source     & measured $\thk$ / curvature-correlated / synthetic DV & measured if available, else stated placeholder \\
+FEM framework (C)    & FEniCSx solid-shell / scikit-fem                      & whichever gives clean wedge extrusion first \\
+$\tor$ threshold     & calibrate from R1                                     & report as a result, not a guess \\
+Pressure $\Delta P$  & fixed 20\,Pa $+$ sensitivity                          & 20\,Pa standard; pattern is the result \\
+Bending metric       & $\dsig$ / bending moment / bending energy             & report $\dsig$ and bending energy \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\onote{\textbf{Writing strategy:} (1) use ``dissipation'' throughout the results---it reads as
+an engineering/physics function; (2) lead the methods-superiority argument with the
+\emph{transmural gradient} $\dsig$, the one quantity curvature/CMSM cannot compute; (3) frame
+the pHH3 correlation as \emph{mechanical homeostasis}---thickness manages stress, and that
+environment then facilitates the observed growth.}
+
+\onote{\textbf{Core questions:} (Q1) how does thin-shell error scale with $\tor$ and where does
+it fail? (Q2) does the measured DV thickness reduce principal-stress variance (dissipation)?
+(Q3) how large is the bending gradient $\dsig$ as the wall thickens? (Q4) do pHH3$^+$ mitoses
+sit in dissipated regions (mechanical homeostasis)?}
+
+\end{document}
