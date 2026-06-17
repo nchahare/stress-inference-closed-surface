@@ -97,6 +97,71 @@ Curvature CSV columns: `X,Y,Z, nx,ny,nz, v1x..v2z, K,H, k1,k2, r1,r2`
 > Note: Python buffers stdout when not attached to a TTY, so background-run prints appear only
 > at exit; run in the foreground (or with `-u`) to see progress live.
 
+### 7. Principal curvature frame and sign consistency (new — 2026-06-17)
+
+Extends the curvature pipeline to produce, per vertex, the full **curvature-aligned
+orthonormal frame** {**e₁**, **e₂**, **n**} — i.e. the principal curvature *directions* as
+unit vectors in world R³ — in addition to the scalar curvatures κ₁ ≥ κ₂.
+
+Strategy: build GFDM first-order operators on the normal field, evaluate the Weingarten map
+**B**ᵢⱼ = (∂ᵢ**n**) · **e**ⱼ (shape operator in the local fit frame), then diagonalise the
+2×2 symmetric **B** analytically via `θ = ½ arctan2(2B₁₂, B₁₁−B₂₂)`. The eigenvectors are
+rotated back to world R³, giving **e₁** (along κ₁) and **e₂** = **n** × **e₁**.
+
+**Sign consistency:** principal directions are only defined up to sign (±**e₁** equally valid).
+The `arctan2` formula picks the sign independently per vertex; at near-umbilic points
+(κ₁≈κ₂, discriminant → 0) it can flip sign relative to neighbours. Larger patch `depth`
+does **not** help (tested depth 2–5: 34–40 flipped vertices, no trend). The fix is a single
+BFS walk from vertex 0 that flips **e₁**[j], **e₂**[j] whenever they disagree with the
+already-visited parent — reducing flips from 34 to 2. The remaining 2 are the umbilic tips
+of the spheroid (genuine topological singularities; Poincaré-Hopf requires ≥ 2 on a closed
+genus-0 surface; unfixable by any algorithm).
+
+**New LaTeX document:** `tension_inference.tex` / `.pdf` — standalone 6-page derivation
+covering: surface parametrisation and fundamental forms, membrane stress resultant,
+balance of linear momentum (normal projection → Young-Laplace; tangential → in-plane
+equilibrium), ambient-component GFDM trick, and the 2×2 analytic diagonalisation.
+
+```powershell
+# per-vertex principal curvature frame: kappa1, kappa2, e1, e2 (world R3), n
+# validates on sphere (kappa1≈kappa2≈1) and spheroid equator (kappa1≈1, kappa2≈0.25)
+& $py surface_curvature_frame.py                  # headless validation
+& $py surface_curvature_frame.py --show           # interactive view: kappa1 colour + e1/e2/n arrows
+& $py surface_curvature_frame.py --csv            # save to out/curvature_frame_*.csv
+#   flags: --file <mesh> --subdiv --depth --show --csv --out-dir
+
+# sign-consistency on the prolate spheroid (the typical case)
+# cyan = consistent after BFS, red = sign-flipped vs majority of 1-ring neighbours
+& $py show_e2_spheroid.py   # result: 34 → 2 flipped (2 umbilic poles)
+
+# sign-consistency on the sphere (worst case: totally umbilic everywhere)
+# hairy-ball theorem: BFS field must have singularities; 314/2562 vertices (12%) affected
+& $py show_e2_sphere.py
+
+# capsule: cylinder (R=1, H=2) + hemispherical caps — three-region validation case
+# cylinder: kappa1=1/R (hoop), kappa2=0 (axial)  |  caps: kappa1=kappa2=1/R (umbilic)
+# mesh coloured by discriminant d=|k1-k2|/2 (0=umbilic blue, 1/2R red); e1 arrows cyan/red
+& $py show_capsule.py
+```
+
+| case | post-BFS inconsistent | why |
+|---|---|---|
+| sphere | 314 (12%) | totally umbilic — all directions undefined; hairy-ball theorem |
+| spheroid | 2 (<0.1%) | only 2 umbilic poles; rest well-defined |
+| capsule | 3 (0.1%) | 2 umbilic cap poles + 1 junction vertex; cylinder body fully consistent |
+
+Capsule curvature validation (computed vs analytic, `ntheta=40 nphi=14`, `n=2522`):
+
+| region | κ₁ mean±std | κ₂ mean±std | analytic (κ₁, κ₂) |
+|---|---|---|---|
+| cylinder body (n=1400) | 1.000 ± 0.000 | 0.034 ± 0.083 | (1.000, 0.000) |
+| spherical caps (n=1042) | 1.037 ± 0.047 | 0.895 ± 0.076 | (1.000, 1.000) |
+
+For real biological meshes (non-umbilic almost everywhere) the spheroid/capsule result
+is the relevant model: BFS leaves at most a handful of isolated singular vertices.
+
+CSV columns: `X,Y,Z, kappa1,kappa2, r1,r2, H,K, e1x,e1y,e1z, e2x,e2y,e2z, nx,ny,nz`
+
 ### 6. Final-results simulations (method comparison: Local vs cMSM vs FEM)
 
 The "final results" follow a 12-sim matrix: **2 geometries** (sphere, prolate ellipsoid 2:1)
@@ -139,7 +204,7 @@ Discretization:
 
 ## Status
 
-Last updated: **2026-06-16 (UTC-04:00)**
+Last updated: **2026-06-17 (UTC-04:00)**
 
 ### Done
 - [x] Selected `fem_env` (scikit-fem 12.0.1, Python 3.11); installed `vedo` (git, 2026.6.2.dev7) + `vtk 9.6.2`; `scipy 1.14.1` present — _2026-06-15_
@@ -156,6 +221,11 @@ Last updated: **2026-06-16 (UTC-04:00)**
 - [x] `manuscript_outline.tex/.pdf` — new manuscript outline (GFDM method, uniform vs non-uniform thickness, hyperelastic FEM comparison, HH17/HH20 results) — _2026-06-16_
 - [x] **Studied the reference cMSM code** (Zenodo `7921052`, downloaded to `cMSM_ref/`); documented the method↔ours comparison + a full GFDM derivation in the working notes — _2026-06-16_
 - [x] `reg_compare.py` — ported cMSM's first-order (grad-trace + curl) regularization into our GFDM solve and compared it to Laplacian smoothing on sphere + spheroid — _2026-06-16_
+- [x] `surface_curvature_frame.py` — principal curvature **directions** (**e₁**, **e₂**) as world-frame unit vectors via shape-operator (Weingarten map) diagonalisation + BFS sign propagation; validated on sphere (κ₁≈κ₂≈1) and spheroid equator (κ₁≈1, κ₂≈0.25); sign flips reduced 34 → 2 (unavoidable umbilic singularities) — _2026-06-17_
+- [x] `tension_inference.tex/.pdf` — new standalone 6-page derivation: surface geometry, membrane equilibrium (normal → Young-Laplace; tangential → in-plane balance), ambient GFDM discretisation, curvature-frame extraction — _2026-06-17_
+- [x] `show_e2_spheroid.py` — sign-consistency visualiser on spheroid: 1-ring dot-product check, cyan/red colouring; confirmed 2 topological singularities at spheroid poles after BFS (34→2) — _2026-06-17_
+- [x] `show_e2_sphere.py` — sign-consistency visualiser on sphere (totally umbilic worst case): 314/2562 vertices (12%) inconsistent after BFS — hairy ball theorem in action; confirms spheroid is the relevant model for real meshes — _2026-06-17_
+- [x] `show_capsule.py` — capsule mesh builder (`make_capsule`) + curvature-frame validation + sign-consistency viewer; 3 region validation (cylinder κ₁=1/R κ₂=0 exact, caps κ₁=κ₂=1/R within 4–10%); 3/2522 (0.1%) inconsistent after BFS — _2026-06-17_
 - [x] **Final-results matrix started** — `local_stress.py` (M1), `final_sims.py` (sphere+ellipsoid M1+M2), `final_real.py` (HH17/HH20 M1+M2), `view_final.py` (interactive, grouped colour limits), `box_compare.py` + `real_box_compare.py` (box plots); ran Sims 1,2,7,8 + the two real meshes at **dp=20** — _2026-06-16_
 
 ### Final-results matrix (2 geom × 2 thickness × 3 methods = 12)
@@ -233,6 +303,11 @@ M1+M2 on **HH17 (decimated to HH20's 3766 pts) + HH20** for the real-mesh compar
 - `view_final.py` — interactive viewer with **grouped shared colour limits** (sphere↔ellipsoid, HH17↔HH20)
 - `box_compare.py` — box plot Local vs cMSM vs analytical (sphere+ellipsoid) → `out/final/box_compare.png`
 - `real_box_compare.py` — box plot HH17 vs HH20 (Local & cMSM) → `out/final/real_box_compare.png`
+- `surface_curvature_frame.py` — principal curvature frame (κ₁,κ₂, **e₁**,**e₂**,**n**): shape-operator diagonalisation + BFS sign propagation for global consistency
+- `tension_inference.tex` / `.pdf` — standalone derivation of surface geometry, membrane balance equations (normal + tangential), GFDM, and curvature-frame extraction
+- `show_e2_spheroid.py` — sign-consistency visualiser for **e₂** on spheroid (cyan=consistent, red=flipped; 2 residual singularities at umbilic poles)
+- `show_e2_sphere.py` — sign-consistency visualiser on sphere (totally umbilic worst case; 314 inconsistent after BFS — hairy ball theorem)
+- `show_capsule.py` — capsule mesh builder (`make_capsule`) + three-region curvature validation + sign-consistency viewer (mesh coloured by discriminant d=|κ₁−κ₂|/2)
 - `stress_estimation.tex` / `.pdf` — working-notes equations, method, results (full GFDM derivation, cMSM comparison, real meshes)
 - `manuscript_outline.tex` / `.pdf` — manuscript outline, **mechanics-first reframing**: thickness-driven stress *dissipation* + *bending* (transmural gradient); Models A (Local) / B (CMSM) / C (3D neo-Hookean FEM), pHH3 mitotic correlation
 - `requirements.txt` — pinned `fem_env` dependencies (Python 3.11)

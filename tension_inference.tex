@@ -1,0 +1,551 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{bm}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue]{hyperref}
+
+%% Short-hands
+\newcommand{\vv}[1]{\bm{#1}}          % bold vector / tensor
+\newcommand{\nn}{\vv{n}}               % unit surface normal
+\newcommand{\NN}{\vv{N}}               % stress-resultant tensor (bold)
+\newcommand{\Nb}{\mathbf{N}}           % same, upright bold (for components)
+\newcommand{\kone}{\kappa_1}
+\newcommand{\ktwo}{\kappa_2}
+\newcommand{\Hmean}{H}
+\newcommand{\Kgauss}{K}
+\newcommand{\divs}{\nabla_{\!s}\!\cdot}
+\newcommand{\tp}{\otimes}              % tensor product
+\newcommand{\R}{\mathbb{R}}
+
+\title{Tension inference on closed surface meshes:\\
+\large surface geometry, membrane equilibrium, and the GFDM solve}
+\author{Working notes (vedo / spatchcocking / GFDM pipeline)}
+\date{2026-06-17}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\bigskip
+
+%% =========================================================================
+\section{Surface geometry and local frame}
+\label{sec:geometry}
+
+%% -------------------------------------------------------------------------
+\subsection{Parametrisation and covariant basis}
+
+Let $\Gamma\subset\R^3$ be a smooth, orientable surface (the midsurface of the
+membrane wall).  We parametrise $\Gamma$ by the mapping
+\begin{equation}
+  \vv{x} = \varphi(\bm{\xi}), \qquad \bm{\xi}=(\xi^1,\xi^2)\in\Gamma_0\subset\R^2.
+  \label{eq:param}
+\end{equation}
+The \emph{covariant basis vectors} tangent to $\Gamma$ are
+\begin{equation}
+  \vv{e}_a = \frac{\partial\vv{x}}{\partial\xi^a}, \qquad a\in\{1,2\}.
+  \label{eq:cov-basis}
+\end{equation}
+These span the tangent plane $T_{\vv x}\Gamma$ at every point.  The
+\emph{first fundamental form} (metric tensor) is
+\begin{equation}
+  g_{ab} = \vv{e}_a\cdot\vv{e}_b.
+  \label{eq:metric}
+\end{equation}
+The unit outward normal is
+\begin{equation}
+  \nn = \frac{\vv{e}_1\times\vv{e}_2}{|\vv{e}_1\times\vv{e}_2|}.
+  \label{eq:normal}
+\end{equation}
+
+%% -------------------------------------------------------------------------
+\subsection{Second fundamental form and shape operator}
+
+The \emph{second fundamental form} encodes how the normal $\nn$ tilts as one
+moves along the surface:
+\begin{equation}
+  b_{ab} = \nn\cdot\frac{\partial^2\vv{x}}{\partial\xi^a\,\partial\xi^b}
+          = -\frac{\partial\nn}{\partial\xi^a}\cdot\vv{e}_b.
+  \label{eq:IIF}
+\end{equation}
+(Both expressions are equivalent by the Weingarten equation.)
+The \emph{shape operator} (Weingarten map) is the mixed tensor
+$W^a{}_b = g^{ac}b_{cb}$, whose eigenvalues are the \emph{principal curvatures}
+$\kone\ge\ktwo$ and whose eigenvectors define the \emph{principal directions}.
+
+The mean and Gaussian curvatures are
+\begin{equation}
+  \Hmean = \tfrac12(\kone+\ktwo), \qquad
+  \Kgauss = \kone\ktwo.
+  \label{eq:HK}
+\end{equation}
+
+%% -------------------------------------------------------------------------
+\subsection{Principal curvature frame}
+\label{sec:frame}
+
+At a non-umbilic point ($\kone\ne\ktwo$) there exists a unique pair of mutually
+orthogonal unit tangent vectors $\vv{e}_1^{\rm pc},\vv{e}_2^{\rm pc}$ aligned
+with the principal directions.  Together with the outward normal, they form the
+\emph{principal curvature frame}:
+\begin{equation}
+  \boxed{%
+  \bigl(\,\vv{e}_1^{\rm pc},\;\vv{e}_2^{\rm pc},\;\nn\,\bigr),
+  \qquad
+  \vv{e}_1^{\rm pc}\times\vv{e}_2^{\rm pc}=\nn,
+  }
+  \label{eq:pc-frame}
+\end{equation}
+an orthonormal right-handed basis of $\R^3$.  At an umbilic point
+($\kone=\ktwo$) any orthonormal pair in the tangent plane serves as the frame.
+
+%% =========================================================================
+\section{Membrane stress model}
+\label{sec:model}
+
+%% -------------------------------------------------------------------------
+\subsection{Assumptions}
+
+\begin{enumerate}[label=(\roman*)]
+  \item \textbf{Thin wall.}  Wall thickness $t$ satisfies
+        $t\ll\min(R_1,R_2)$ with $R_i=1/|\kappa_i|$, so bending moments are
+        negligible and stress is uniform through the thickness.
+  \item \textbf{Membrane state of stress.}  The wall stress is purely in-plane
+        (tangential to $\Gamma$); there are no transverse shear or normal
+        stresses.
+  \item \textbf{Quasi-static equilibrium.}  Inertial forces are zero.
+  \item \textbf{No tangential body force.}  The only applied load is a
+        normal pressure jump $\Delta p = p_{\rm in}-p_{\rm out}>0$.
+\end{enumerate}
+
+%% -------------------------------------------------------------------------
+\subsection{Stress resultant tensor}
+
+The Cauchy stress integrated through the thickness gives the \emph{membrane
+stress-resultant tensor} (force per unit length):
+\begin{equation}
+  \Nb = \int_{-t/2}^{+t/2}\bm{\sigma}\,ds,
+  \qquad \Nb\,\nn = \vv{0}.
+  \label{eq:resultant}
+\end{equation}
+The constraint $\Nb\,\nn=\vv{0}$ states that $\Nb$ is tangential.  In the
+principal curvature frame it takes the form
+\begin{equation}
+  \Nb
+    = N_{11}\,\vv{e}_1^{\rm pc}\tp\vv{e}_1^{\rm pc}
+    + N_{22}\,\vv{e}_2^{\rm pc}\tp\vv{e}_2^{\rm pc}
+    + N_{12}\bigl(\vv{e}_1^{\rm pc}\tp\vv{e}_2^{\rm pc}
+                 +\vv{e}_2^{\rm pc}\tp\vv{e}_1^{\rm pc}\bigr),
+  \label{eq:N-decomp}
+\end{equation}
+with three independent scalar DOFs $(N_{11},N_{22},N_{12})$ per vertex.  The
+corresponding \emph{principal membrane stresses} are
+\begin{equation}
+  \sigma_1 = \frac{N_{11}}{t}, \qquad \sigma_2 = \frac{N_{22}}{t}.
+  \label{eq:sigma}
+\end{equation}
+
+%% =========================================================================
+\section{Balance of linear momentum}
+\label{sec:balance}
+
+%% -------------------------------------------------------------------------
+\subsection{Vector equilibrium equation}
+
+The membrane equilibrium follows from the balance of forces on an infinitesimal
+surface patch.  In Cauchy form on the surface:
+\begin{equation}
+  \divs\Nb + \Delta p\,\nn = \vv{0}.
+  \label{eq:equil}
+\end{equation}
+Here $\divs$ is the \emph{surface divergence}: for a surface tensor field
+$\Nb$, $(\divs\Nb)^i = \nabla_\alpha N^{\alpha i}$ where $\nabla_\alpha$ is
+the covariant surface derivative along $\vv{e}_\alpha$.
+
+Equation~\eqref{eq:equil} is a vector equation in $\R^3$.  Projecting onto
+$\nn$ and onto the two tangent directions separates it into one \emph{normal}
+and two \emph{tangential} scalar equations.
+
+%% -------------------------------------------------------------------------
+\subsection{Normal component --- the Laplace (Young--Laplace) law}
+\label{sec:normal}
+
+Taking the dot product of~\eqref{eq:equil} with $\nn$ and using the identity
+$(\divs\Nb)\cdot\nn = -\Nb:B$ (where $B=[b_{ab}]$ is the second fundamental
+form regarded as a bilinear form), we obtain
+\begin{equation}
+  \Nb : B = \Delta p,
+  \label{eq:laplace-tensor}
+\end{equation}
+i.e.\ $N^{ab}b_{ab}=\Delta p$.  In the principal curvature frame
+($b_{ab}=\mathrm{diag}(\kone,\ktwo)$ and $N_{12}=0$ on the principal axes) this
+reduces to the classical \textbf{Young--Laplace law}:
+\begin{equation}
+  \boxed{N_{11}\,\kone + N_{22}\,\ktwo = \Delta p,}
+  \label{eq:laplace}
+\end{equation}
+or equivalently, in terms of principal stresses and thickness,
+\begin{equation}
+  \sigma_1\,\kone + \sigma_2\,\ktwo = \frac{\Delta p}{t}.
+  \label{eq:laplace-sigma}
+\end{equation}
+This is the \emph{normal projection} of the equilibrium: one scalar equation
+per surface point relating the two unknown stress components to the pressure
+load and the local curvatures.
+
+%% -------------------------------------------------------------------------
+\subsection{Tangential components --- in-plane equilibrium}
+\label{sec:tangential}
+
+Projecting~\eqref{eq:equil} onto the two tangent directions $\vv{e}_\alpha^{\rm
+pc}$ ($\alpha=1,2$) and using $\Delta p\,\nn\cdot\vv{e}_\alpha^{\rm pc}=0$ gives
+\begin{equation}
+  \bigl(\divs\Nb\bigr)\cdot\vv{e}_\alpha^{\rm pc} = 0, \qquad \alpha=1,2.
+  \label{eq:tang-equil}
+\end{equation}
+In local coordinates these expand to:
+\begin{align}
+  \frac{\partial N_{11}}{\partial s_1}
+  + \frac{\partial N_{12}}{\partial s_2}
+  + (\kone-\ktwo)\,N_{12}\,c_{\alpha\beta}
+  &= 0, \label{eq:tang1} \\[4pt]
+  \frac{\partial N_{12}}{\partial s_1}
+  + \frac{\partial N_{22}}{\partial s_2}
+  + (\kone-\ktwo)\,N_{12}\,c_{\alpha\beta}
+  &= 0, \label{eq:tang2}
+\end{align}
+where $\partial/\partial s_\alpha$ denotes the arc-length derivative along
+$\vv{e}_\alpha^{\rm pc}$ and the curvature-coupling terms arise from the
+Christoffel symbols of the surface connection.
+
+\paragraph{On closed surfaces.}  Equations~\eqref{eq:laplace} and
+\eqref{eq:tang-equil} together form a $3n$-dimensional system for $(N_{11},
+N_{22},N_{12})$ at every vertex.  The system is \emph{statically indeterminate}
+on a closed surface (genus 0): there exists a finite-dimensional space of
+self-equilibrating (null) stress states.  These are suppressed by Tikhonov
+regularisation (Section~\ref{sec:gfdm}).
+
+%% =========================================================================
+\section{Ambient-component form and the GFDM discretisation}
+\label{sec:gfdm}
+
+%% -------------------------------------------------------------------------
+\subsection{Working in world Cartesian components}
+
+A key simplification arises when $\Nb$ is expressed in its \emph{ambient
+Cartesian components} $N^{ij}$ ($i,j\in\{1,2,3\}$) rather than covariant
+surface components.  The surface divergence then reads
+\begin{equation}
+  \bigl(\divs\Nb\bigr)^i
+    = \sum_j\Bigl[
+        (v_1)_j\,\partial_\xi N^{ij} + (v_2)_j\,\partial_\eta N^{ij}
+      \Bigr],
+  \label{eq:divs-ambient}
+\end{equation}
+where $(v_1,v_2,\nn)$ is any local orthonormal tangent frame and
+$\partial_\xi,\partial_\eta$ are the surface derivatives along $v_1,v_2$.  The
+Christoffel symbols (surface connection terms) are \emph{absorbed into the
+ambient representation}: they do not appear explicitly, which makes the
+formulation valid on arbitrary surfaces without coordinate charts.
+
+\paragraph{Constraint $\Nb\,\nn=\vv 0$.}  In the local frame $(v_1,v_2)$ the
+constraint is automatically satisfied by the parameterisation
+\begin{equation}
+  \Nb = p\,(v_1\tp v_1) + q\,(v_2\tp v_2) + r\,(v_1\tp v_2 + v_2\tp v_1),
+  \label{eq:dofs}
+\end{equation}
+giving 3 scalar DOFs $(p,q,r)$ per vertex.  Principal stresses are eigenvalues
+of the $2\times 2$ matrix $\bigl[\begin{smallmatrix}p&r\\r&q\end{smallmatrix}\bigr]$
+divided by $t$.
+
+%% -------------------------------------------------------------------------
+\subsection{Generalised finite-difference (GFDM) operators}
+
+At each vertex $i$ with local frame $(v_1^{(i)},v_2^{(i)},\nn^{(i)})$ we
+gather the $k$-ring neighbourhood $\mathcal{N}(i)$ (ring depth $d=3$ by
+default, giving $\sim\!30$ neighbours).  Neighbour positions are projected into
+the tangent plane as $(\xi_j,\eta_j)$ coordinates.  We then solve a
+weighted least-squares quadratic Taylor expansion
+\begin{equation}
+  f_j - f_i \;\approx\;
+    a_i\xi_j + b_i\eta_j
+    + \tfrac12 c_i\xi_j^2 + d_i\xi_j\eta_j + \tfrac12 e_i\eta_j^2,
+  \label{eq:taylor}
+\end{equation}
+for the 5 coefficients $(a_i,\dots,e_i)$.  The first-order coefficients give
+\emph{stencil weights} that assemble into sparse $n\times n$ matrices:
+\begin{equation}
+  (G_\xi f)_i \approx \frac{\partial f}{\partial\xi}\Big|_i,
+  \qquad
+  (G_\eta f)_i \approx \frac{\partial f}{\partial\eta}\Big|_i.
+  \label{eq:gfdm-ops}
+\end{equation}
+Similarly, the second-order coefficients yield $H_{\xi\xi},H_{\xi\eta},H_{\eta\eta}$.
+
+%% -------------------------------------------------------------------------
+\subsection{Assembly and solve}
+
+Substituting~\eqref{eq:dofs} into~\eqref{eq:divs-ambient} and
+\eqref{eq:equil} yields a sparse linear system $L\,\vv{s}=\vv{b}$ of size
+$3n\times 3n$:
+\begin{equation}
+  L\,\vv{s} + \vv{b} = \vv{0}, \qquad
+  \vv{b}^{(i)} = -\Delta p\,\nn^{(i)}, \qquad
+  \vv{s}^{(i)} = (p_i,q_i,r_i).
+  \label{eq:system}
+\end{equation}
+Because the system is \emph{rank-deficient} on a closed surface (null modes),
+we solve the Tikhonov-regularised normal equations:
+\begin{equation}
+  (L^\top L + \lambda^2 R^\top R)\,\vv{s} = L^\top\vv{b},
+  \label{eq:tikhonov}
+\end{equation}
+with $R$ a smoothness regulariser (e.g.\ identity or discrete Laplacian) and
+$\lambda\approx 0.01$--$0.05$.  After solving, a light Laplacian
+post-smoothing ($\sigma\leftarrow(1-\alpha)\sigma+\alpha\bar\sigma_{1\text{-ring}}$,
+$\alpha=0.5$, $\sim\!12$ iterations) suppresses the residual icosahedral
+discretisation artefacts.
+
+%% =========================================================================
+\section{Extracting the principal curvature frame}
+\label{sec:pc-frame}
+
+%% -------------------------------------------------------------------------
+\subsection{Shape operator from the Weingarten map}
+
+For each vertex $i$ with local frame $(v_1,v_2,\nn)$, the GFDM operators give
+the surface gradient of the normal field $\nn$:
+\begin{equation}
+  \frac{\partial\nn}{\partial\xi}\Big|_i = G_\xi\,\nn, \qquad
+  \frac{\partial\nn}{\partial\eta}\Big|_i = G_\eta\,\nn.
+  \label{eq:grad-n}
+\end{equation}
+The components of the second fundamental form in the local frame are then
+\begin{align}
+  B_{11} &= \frac{\partial\nn}{\partial\xi}\cdot v_1, &
+  B_{22} &= \frac{\partial\nn}{\partial\eta}\cdot v_2, &
+  B_{12} &= \tfrac12\!\left(\frac{\partial\nn}{\partial\xi}\cdot v_2
+                           + \frac{\partial\nn}{\partial\eta}\cdot v_1\right).
+  \label{eq:B-components}
+\end{align}
+(Sign: $+\mathrm{grad}_s\nn$, so $\mathrm{tr}\,B=2H>0$ for an outward normal
+under positive pressure.)
+
+%% -------------------------------------------------------------------------
+\subsection{Analytic 2$\times$2 diagonalisation}
+
+The shape operator is represented by the symmetric $2\times 2$ matrix
+$\mathbf{B}=\bigl[\begin{smallmatrix}B_{11}&B_{12}\\B_{12}&B_{22}\end{smallmatrix}\bigr]$
+in the $(v_1,v_2)$ basis.  Its eigenvalues are the principal curvatures:
+\begin{equation}
+  H_{\rm loc} = \tfrac12(B_{11}+B_{22}), \quad
+  d = \sqrt{\tfrac14(B_{11}-B_{22})^2 + B_{12}^2},
+  \label{eq:eig-Hloc}
+\end{equation}
+\begin{equation}
+  \kone = H_{\rm loc}+d \;\ge\; \ktwo = H_{\rm loc}-d.
+  \label{eq:eig-kappas}
+\end{equation}
+The eigenvector for $\kone$ makes angle $\theta$ with $v_1$ in the tangent
+plane, where
+\begin{equation}
+  \theta = \tfrac12\arctan\!\frac{2B_{12}}{B_{11}-B_{22}}.
+  \label{eq:theta}
+\end{equation}
+The principal curvature directions in world $\R^3$ are then
+\begin{equation}
+  \vv{e}_1^{\rm pc} = \cos\theta\;v_1 + \sin\theta\;v_2, \qquad
+  \vv{e}_2^{\rm pc} = \nn\times\vv{e}_1^{\rm pc}.
+  \label{eq:pc-dirs}
+\end{equation}
+The resulting frame $(\vv{e}_1^{\rm pc},\vv{e}_2^{\rm pc},\nn)$ is orthonormal
+and right-handed by construction.  At umbilic points ($d=0$) the angle
+$\theta=0$ by convention; any orthonormal pair in the tangent plane is equally
+valid.
+
+%% -------------------------------------------------------------------------
+\subsection{Sign ambiguity and global consistency}
+\label{sec:sign}
+
+\paragraph{The line-field problem.}
+Each principal direction is defined only up to sign: $\vv{e}_1^{\rm pc}$ and
+$-\vv{e}_1^{\rm pc}$ are physically equivalent.  The $\arctan2$ formula in
+equation~\eqref{eq:theta} picks a sign at each vertex \emph{independently}.
+Near a \emph{umbilic point} ($\kone\approx\ktwo$, $d\to0$), the discriminant
+vanishes and $\arctan2$ is sensitive to floating-point noise: the sign chosen
+at vertex $i$ can oppose that of its neighbour $j$, even though the true
+direction varies smoothly.  Numerical experiments on the prolate spheroid
+(IcoSphere, $\sim$2600 vertices) show that increasing the neighbourhood depth
+$d_{\rm ring}$ from 2 to 5 does not reduce the number of sign-flipped vertices
+(34--40 at all depths), confirming that the issue is geometric, not a
+fit-accuracy problem.
+
+\paragraph{BFS sign propagation.}
+A single breadth-first traversal of the mesh graph (from an arbitrary seed
+vertex) enforces a globally consistent orientation.  Starting from vertex 0
+with its computed $\vv{e}_1^{\rm pc}$, every unvisited neighbour $j$ of a
+visited vertex $i$ is checked:
+\begin{equation}
+  \text{if } \vv{e}_1^{\rm pc}(i)\cdot\vv{e}_1^{\rm pc}(j) < 0,\quad
+  \text{then } \vv{e}_1^{\rm pc}(j)\leftarrow -\vv{e}_1^{\rm pc}(j),\;
+               \vv{e}_2^{\rm pc}(j)\leftarrow -\vv{e}_2^{\rm pc}(j).
+  \label{eq:bfs}
+\end{equation}
+Flipping both $\vv{e}_1^{\rm pc}$ and $\vv{e}_2^{\rm pc}$ simultaneously
+preserves the right-handedness of the frame:
+$(-\vv{e}_1^{\rm pc})\times(-\vv{e}_2^{\rm pc})=\vv{e}_1^{\rm pc}\times\vv{e}_2^{\rm pc}=\nn$.
+On the prolate spheroid, BFS reduces the number of sign-flipped 1-ring pairs
+from 34 to 2.
+
+\paragraph{Unavoidable topological singularities.}
+The 2 residual flipped vertices correspond to the two \emph{umbilic points} at
+the tips of the spheroid, where $\kone=\ktwo$ exactly.  These are genuine
+topological singularities of the principal curvature line field: the
+eigenvectors of $\mathbf{B}$ wind around such a point and no globally
+consistent orientation exists in its neighbourhood.  This is not a numerical
+artefact.
+
+The Poincaré--Hopf theorem, applied to the principal curvature line field,
+requires that the sum of singularity indices equals the Euler characteristic
+$\chi(\Gamma)$ of the surface.  For a closed genus-0 surface
+$\chi=2$; each regular umbilic point contributes index $+1$ to this sum.  The
+prolate spheroid has exactly two umbilic points (both poles), each of index
+$+1$, saturating the bound.  On an arbitrary smooth closed surface of genus 0
+the Carath\'eodory conjecture asserts that there are always at least two
+umbilic points; hence \textbf{at least 2 sign-propagation singularities are
+unavoidable on any closed genus-0 mesh}, regardless of resolution or
+neighbourhood size.
+
+%% =========================================================================
+\section{Summary: the per-vertex output}
+\label{sec:output}
+
+For each vertex the pipeline produces:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Quantity} & \textbf{Symbol} & \textbf{Dimensions} \\
+\midrule
+Principal curvatures    & $\kone,\ktwo$                & $\mathrm{m}^{-1}$ \\
+Principal radii         & $R_1=1/\kone,\;R_2=1/\ktwo$ & $\mathrm{m}$       \\
+Mean / Gaussian         & $H,K$                        & $\mathrm{m}^{-1}$, $\mathrm{m}^{-2}$ \\
+Principal direction 1   & $\vv{e}_1^{\rm pc}\in\R^3$  & ---                \\
+Principal direction 2   & $\vv{e}_2^{\rm pc}\in\R^3$  & ---                \\
+Outward unit normal     & $\nn\in\R^3$                 & ---                \\
+\midrule
+Stress resultant (after solve)  & $N_{11},N_{22},N_{12}$ & $\mathrm{N/m}$ \\
+Principal stresses              & $\sigma_1,\sigma_2$     & $\mathrm{Pa}$  \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent The curvature frame is computed by \texttt{surface\_curvature\_frame.py}
+(\texttt{compute\_curvature\_frame}); the stress solve is in
+\texttt{membrane\_stress\_fd.py} (\texttt{solve\_membrane}).
+
+%% =========================================================================
+\section{Validation cases}
+\label{sec:validation}
+
+\paragraph{Sphere, $R=1$ (totally umbilic — worst case).}
+All principal curvatures equal $1/R=1$; $H=1$, $K=1$ everywhere.  Because
+$d\equiv0$ at every vertex, every point is umbilic and principal directions are
+completely undefined: $\mathbf{B}=(1/R)\mathbf{I}_2$ so the $\arctan2$ formula
+receives $(0,\,0)$ and the sign at each vertex is set by floating-point noise in
+the GFDM estimate of $B_{12}$.  Frame orthonormality is still preserved to
+machine precision ($|\vv{e}_1\cdot\vv{e}_2|\le10^{-16}$), but the
+\emph{directions} are numerically arbitrary.
+
+After BFS propagation the result is a smooth tangent vector field on $S^2$.
+By the \textbf{hairy ball theorem} (a corollary of Poincaré--Hopf for $S^2$)
+no continuous non-vanishing tangent vector field can exist on the sphere; the
+BFS field must therefore develop singularities.  On an IcoSphere subdiv-4
+($n=2562$ vertices), 314 vertices (12\% of the mesh) have more than 40\% of
+their 1-ring neighbours pointing in the opposite direction after BFS —
+forming broad singular \emph{patches} rather than isolated points, because the
+entire surface is critical.  The curvature scalars ($\kone,\ktwo,H,K$) are
+unaffected; only the directional output (\textbf{e}$_1$, \textbf{e}$_2$) is
+meaningless on a totally umbilic surface.
+
+\paragraph{Prolate spheroid, $a=2$, $b=1$ (long axis $x$).}
+Away from the poles the surface is non-umbilic ($d>0$) and the principal
+directions are well-defined.  At the equator ($|x|<0.1a$, $\sim\!1036$
+vertices on IcoSphere subdiv-4):
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+Quantity & Computed (mean) & Std & Analytic \\
+\midrule
+$\kone$ (hoop)       & 1.004 & 0.028 & $1/b=1.000$ \\
+$\ktwo$ (meridional) & 0.248 & 0.007 & $b/a^2=0.250$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Frame orthonormality: $|\vv{e}_1\cdot\vv{e}_2|\le2\times10^{-16}$ (machine
+precision).  Membrane stresses: $\sigma_{\rm hoop}=\Delta p r_2(1-r_2/2r_1)/t$,
+$\sigma_{\rm merid}=\Delta p r_2/2t$.
+
+\paragraph{Capsule, $R=1$, $H=2$ (cylinder + hemispherical end-caps).}
+
+A capsule is a cylinder of radius $R$ and half-height $H$ capped with two
+hemispheres.  It has three geometrically distinct regions:
+\begin{itemize}[nosep]
+  \item \textbf{Cylindrical body} ($|z|<H$): $\kone=1/R$ (hoop), $\ktwo=0$ (axial).
+        Non-umbilic; $d=1/(2R)$; principal directions well-defined.
+  \item \textbf{Spherical caps} ($|z|>H+R\,\varepsilon$): $\kone=\ktwo=1/R$.
+        Totally umbilic; $d=0$; same sign-propagation pathology as the sphere.
+  \item \textbf{Junction} ($|z|\approx H$): $d$ ramps smoothly between the two values.
+\end{itemize}
+The parametric capsule mesh (\texttt{make\_capsule} in \texttt{show\_capsule.py},
+$n_\theta=40$, $n_\varphi=14$, matched ring spacing) gives $n=2522$ vertices.
+
+\begin{center}
+\begin{tabular}{lrrrrr}
+\toprule
+Region & $n$ & $\bar\kone$ & $\sigma(\kone)$ & $\bar\ktwo$ & $\sigma(\ktwo)$ \\
+\midrule
+Cylinder body ($n_{\rm cyl}=1400$) & analytic & \multicolumn{2}{c}{$\kone=1.000$} & \multicolumn{2}{c}{$\ktwo=0$} \\
+ & computed & 1.000 & 0.000 & 0.034 & 0.083 \\[2pt]
+Spherical caps ($n_{\rm cap}=1042$) & analytic & \multicolumn{2}{c}{$\kone=1.000$} & \multicolumn{2}{c}{$\ktwo=1.000$} \\
+ & computed & 1.037 & 0.047 & 0.895 & 0.076 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The cylinder $\kone$ is exact (GFDM error $<0.001$); $\ktwo=0.034$ (3.4\%)
+reflects the stencil mixing axial and hoop contributions near the coarse
+junction seam.  Cap errors ($\sim$4--10\%) are highest at cap vertices whose
+stencils span the junction.
+
+Sign-consistency after BFS: \textbf{3} inconsistent vertices out of 2522
+(0.1\%), located at the two umbilic poles and one nearby junction vertex.
+
+\paragraph{Sign-consistency comparison ($n\approx2550$, after BFS).}
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+ & \textbf{Sphere} & \textbf{Spheroid} & \textbf{Capsule} \\
+ & (all umbilic)   & (2 umbilic poles) & (2 umbilic poles + cylinder) \\
+\midrule
+Inconsistent vertices ($>$40\% flipped) & 314\;(12\%) & 2\;($<$0.1\%) & 3\;(0.1\%) \\
+Max flip fraction                        & 0.83 & 0.67 & 0.67 \\
+Mean flip fraction                       & 0.12 & 0.018 & 0.021 \\
+Depth sweep (2--5) helps?               & no & no & no \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The capsule behaves like the spheroid: BFS reduces sign flips to the 2--3
+unavoidable singularities at the two umbilic cap poles.  The cylinder body is
+entirely clean.  For real biological meshes (non-umbilic almost everywhere) the
+spheroid/capsule result is the relevant model.  The sphere is the degenerate
+worst case.
+
+\end{document}
