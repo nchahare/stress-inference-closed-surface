@@ -401,6 +401,91 @@ prescribed geometry.  Thickness couples non-trivially in other regimes:
         and drainage, not the mechanical force balance.
 \end{itemize}
 
+%% -------------------------------------------------------------------------
+\subsection{Why the surface must be solid-like: the fluid versus elastic limit}
+\label{sec:fluid-vs-elastic}
+
+It is worth making explicit \emph{why} the stress tensor $\Nb$ of
+\S\ref{sec:model} has three independent components in the first place, rather
+than a single scalar tension.  The answer separates a soap bubble from an
+epithelial shell, and it is the reason the inverse problem solved in these notes
+is non-trivial.
+
+\paragraph{The fluid limit: isotropic tension.}
+A clean fluid interface cannot store in-plane shear, so its surface stress is
+\emph{isotropic},
+\begin{equation}
+  \Nb = \gamma\,\mathbf P, \qquad \mathbf P = \mathbf I - \nn\otimes\nn,
+  \label{eq:fluid-stress}
+\end{equation}
+with a single scalar tension $\gamma$ and $\mathbf P$ the tangential projector.
+Substituting~\eqref{eq:fluid-stress} into the equilibrium
+law~\eqref{eq:equil} and using
+$\divs(\gamma\mathbf P)=\nabla_{\!s}\gamma+\gamma\,\divs\mathbf P$ with the
+identity $\divs\mathbf P=-(\kone+\ktwo)\,\nn$ gives
+\begin{equation}
+  \nabla_{\!s}\gamma \;-\; \gamma(\kone+\ktwo)\,\nn \;+\; \Delta p\,\nn = \vv0,
+  \label{eq:fluid-balance}
+\end{equation}
+whose normal and tangential projections are
+\begin{equation}
+  \underbrace{\gamma(\kone+\ktwo)=\Delta p}_{\text{normal: local Young--Laplace}},
+  \qquad\qquad
+  \underbrace{\nabla_{\!s}\gamma=\vv0}_{\text{tangential}}.
+  \label{eq:fluid-projections}
+\end{equation}
+Since the enclosed pressure is uniform, the normal equation forces
+$\kone+\ktwo=\Delta p/\gamma(\vv x)$: a low-tension patch must carry high mean
+curvature (the interface bulges where $\gamma$ is small).  The tangential
+equation is the decisive one --- a static fluid interface \emph{requires uniform
+tension}.
+
+\paragraph{A bubble homogenises its own tension.}
+A tension gradient $\nabla_{\!s}\gamma$ is a tangential (Marangoni) force per
+unit area, and a fluid has no in-plane shear stress to oppose it.  It is
+therefore not an equilibrium at all: the gradient drives Marangoni flow that
+transports surfactant (or heat) until $\gamma$ equalises, or until a steady
+state in which a \emph{bulk} viscous traction balances it.  A heterogeneous
+surface tension on a true bubble is thus an intrinsically dynamic, non-static
+state.  For it to persist statically, the tangential force must be balanced by
+something able to carry tangential stress: surface (Gibbs) elasticity, surface
+viscosity in steady flow, a bulk shear traction, or a genuinely solid-like
+elastic skin.
+
+\paragraph{The elastic limit: heterogeneity forces anisotropy.}
+An epithelial cortex (or the aneurysm wall of the bulge-inflation experiments)
+\emph{can} carry shear, so $\Nb$ is a full symmetric tensor.  Splitting it into
+an isotropic tension plus a deviatoric part, $\Nb=\gamma(\vv x)\mathbf P+\Nb_{\rm
+dev}$, the tangential balance becomes
+\begin{equation}
+  \nabla_{\!s}\gamma + \bigl(\divs\Nb_{\rm dev}\bigr)\big|_{\rm tangent} = \vv0 .
+  \label{eq:het-forces-aniso}
+\end{equation}
+Hence a spatially varying scalar tension \emph{cannot remain isotropic} at
+equilibrium: its gradient must be balanced by the divergence of a deviatoric
+(shear) stress.  Heterogeneity of the mean tension and anisotropy of the stress
+tensor are not independent --- equilibrium couples them.  This is exactly why,
+on a general surface, the shear DOF $r\ne0$ and the principal-stress axes tilt
+off the curvature axes (Sections~\ref{sec:pc-frame-solve}
+and~\ref{sec:stress-dirs}): a heterogeneous tension landscape \emph{is} an
+anisotropic stress field.
+
+\paragraph{Why this makes the inverse problem well posed.}
+The same contrast re-derives the static determinacy of
+\S\ref{sec:el-determinacy} from the counting of unknowns:
+\begin{itemize}[nosep]
+  \item \textbf{Fluid surface} --- one unknown $\gamma$ per point.  The normal
+        equation alone fixes it, and the tangential
+        equation~\eqref{eq:fluid-projections} then over-constrains it to be
+        uniform.  There is nothing to infer.
+  \item \textbf{Elastic membrane} --- three unknowns $(p,q,r)$ per point against
+        three equilibrium equations.  Statically determinate, and able to carry a
+        heterogeneous, anisotropic stress field.
+\end{itemize}
+The membrane-stress inference of these notes is meaningful precisely because the
+biological surface is solid-like rather than fluid: only then does a structured,
+time-stable tension landscape exist to be recovered.
+
 %% =========================================================================
 \section{Balance of linear momentum}
 \label{sec:balance}
