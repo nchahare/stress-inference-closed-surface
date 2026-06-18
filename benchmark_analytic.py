@@ -117,6 +117,7 @@ ax.set_ylabel("Stress (Pa)")
 ax.set_title(r"Sphere ($R=1$,  $\sigma_1=\sigma_2=200$ Pa)")
 ax.legend(fontsize=8)
 ax.set_xlim(0, np.pi)
+ax.set_ylim(0)
 ax.grid(alpha=0.3)
 
 # =====================================================================
@@ -164,6 +165,7 @@ ax.set_ylabel("Stress (Pa)")
 ax.set_title(r"Spheroid ($a=2,\ b=1$)")
 ax.legend(fontsize=7, ncol=2)
 ax.set_xlim(0, np.pi)
+ax.set_ylim(0)
 ax.grid(alpha=0.3)
 
 # =====================================================================
@@ -215,6 +217,7 @@ ax.set_xlabel("Long-axis coordinate $x$")
 ax.set_ylabel("Stress (Pa)")
 ax.set_title(r"Capsule ($R=1$, $H=2$)")
 ax.legend(fontsize=7)
+ax.set_ylim(0)
 ax.grid(alpha=0.3)
 
 # ---- save ----------------------------------------------------------------- #
