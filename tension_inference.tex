@@ -826,15 +826,19 @@ Table~\ref{tab:benchmark} summarises the quantitative errors.
 \begin{figure}[ht]\centering
   \includegraphics[width=\textwidth]{out/benchmark_analytic.png}
   \caption{Analytic benchmark: GFDM (Laplacian-smoothed) vs exact membrane
-  stresses.  \textbf{Left}: sphere — histogram of $\sigma_1$ raw (blue) and
-  smoothed (orange); dashed line at analytic 200\,Pa; smoothing halves the
-  spread.  \textbf{Centre}: prolate spheroid — per-vertex $\sigma_1$ (blue)
-  and $\sigma_2$ (red) scatter vs latitude $\beta$, with analytic curves
-  (solid lines); good agreement across the surface except near the umbilic
+  stresses.  All three panels share the same format: per-vertex $\sigma_1$
+  (blue) and $\sigma_2$ (red) scatter vs a latitude-like coordinate, with
+  analytic reference lines (black/solid).
+  \textbf{Left}: sphere — $\beta=\arccos(z/R)$; both $\sigma_1$ and
+  $\sigma_2$ should equal 200\,Pa everywhere (dashed line); the small scatter
+  is the residual null-mode noise after smoothing.
+  \textbf{Centre}: prolate spheroid — latitude $\beta$ from pole to pole;
+  solid curves are the analytic $\sigma_{\max}$ and $\sigma_{\min}$ from the
+  axisymmetric membrane formula; good agreement except near the umbilic
   poles ($\beta=0,\pi$) where the curvature frame is undefined.
-  \textbf{Right}: capsule — scatter vs long-axis coordinate; dashed lines
-  mark the analytic cylinder hoop (400\,Pa) and axial/cap (200\,Pa) values;
-  vertical dotted lines mark the cylinder/cap boundary.}
+  \textbf{Right}: capsule — scatter vs long-axis coordinate $x$; solid lines
+  are the analytic cylinder hoop (400\,Pa) and axial/cap (200\,Pa) values;
+  vertical dotted lines mark the cylinder/cap boundary at $|x|=H$.}
   \label{fig:benchmark}
 \end{figure}
 

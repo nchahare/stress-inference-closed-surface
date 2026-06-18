@@ -85,33 +85,38 @@ fig.suptitle(
 )
 
 # =====================================================================
-# Panel 1 — Sphere
+# Panel 1 — Sphere (latitude scatter, same style as spheroid)
 # =====================================================================
 ax = axes[0]
 
-s1r  = d_sph["sigma1"]
-s1sm = d_sph["sigma1_smooth"]
-s2r  = d_sph["sigma2"]
-s2sm = d_sph["sigma2_smooth"]
+pts_s  = d_sph["pts"]
+s1r    = d_sph["sigma1"]
+s1sm   = d_sph["sigma1_smooth"]
+s2sm   = d_sph["sigma2_smooth"]
 sig_ref = DP * R / (2 * T)   # 200 Pa
 
-bins = np.linspace(80, 320, 60)
-ax.hist(s1r,  bins=bins, alpha=0.45, color="tab:blue",   label=r"$\sigma_1$ raw")
-ax.hist(s1sm, bins=bins, alpha=0.60, color="tab:orange", label=r"$\sigma_1$ smoothed")
-ax.axvline(sig_ref, color="k", lw=2, ls="--", label=f"analytic {sig_ref:.0f} Pa")
+# latitude β = arccos(z / R), pole at z-axis (arbitrary for isotropic sphere)
+beta_s = np.arccos(np.clip(pts_s[:, 2] / R, -1, 1))
 
-# error annotation
-err_raw = np.abs(s1r  - sig_ref).mean() / sig_ref * 100
-err_sm  = np.abs(s1sm - sig_ref).mean() / sig_ref * 100
+stride_s = max(1, len(beta_s) // 500)
+ax.scatter(beta_s[::stride_s], s1sm[::stride_s], s=6, alpha=0.5,
+           color="tab:blue", zorder=2, label=r"$\sigma_1$ (smoothed)")
+ax.scatter(beta_s[::stride_s], s2sm[::stride_s], s=6, alpha=0.5,
+           color="tab:red",  zorder=2, label=r"$\sigma_2$ (smoothed)")
+ax.axhline(sig_ref, color="k", lw=2, ls="--", zorder=3,
+           label=f"analytic {sig_ref:.0f} Pa")
+
+err_sm = np.abs(s1sm - sig_ref).mean() / sig_ref * 100
 ax.text(0.97, 0.97,
-        f"mean err (raw): {err_raw:.1f}%\nmean err (sm): {err_sm:.1f}%",
+        f"mean err (smoothed): {err_sm:.1f}%",
         transform=ax.transAxes, ha="right", va="top", fontsize=8,
         bbox=dict(boxstyle="round,pad=0.3", fc="white", alpha=0.8))
 
-ax.set_xlabel("Stress (Pa)")
-ax.set_ylabel("Vertex count")
-ax.set_title(r"Sphere ($R=1$,  $\sigma_{\rm ref}=200$ Pa)")
+ax.set_xlabel(r"Latitude $\beta$ (0 = north pole, $\pi/2$ = equator, $\pi$ = south pole)")
+ax.set_ylabel("Stress (Pa)")
+ax.set_title(r"Sphere ($R=1$,  $\sigma_1=\sigma_2=200$ Pa)")
 ax.legend(fontsize=8)
+ax.set_xlim(0, np.pi)
 ax.grid(alpha=0.3)
 
 # =====================================================================
