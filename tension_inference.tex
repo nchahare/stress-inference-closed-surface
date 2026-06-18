@@ -1428,4 +1428,245 @@ biological intuition:
 Agreement with these expectations is qualitative but provides an
 independent check on the sign and orientation of the computed stress field.
 
+%% =========================================================================
+\section{Biological interpretation: the neural-tube tension landscape}
+\label{sec:neuraltube}
+
+The validation sections establish that the GFDM solve recovers the correct
+membrane stress on geometries where the answer is known.  This section turns to
+the harder question of \emph{what the inferred tension landscape means} on a real
+embryonic organ — the chick neural tube — and what can and cannot be concluded
+from equilibrium alone.  Two recent works bracket our method from opposite sides
+and, read together, suggest a small number of genuinely novel, testable
+statements about neural-tube mechanics.  We use them as anchors: Romo
+\textit{et al.} (2014), a full-field experimental stress analysis of inflated
+aneurysm tissue, and Bal \textit{et al.} (2026), a first-principles active-shell
+continuum theory coarse-grained from a 3D vertex model.
+
+%% -------------------------------------------------------------------------
+\subsection{Two reference points sharing one equilibrium core}
+\label{sec:nt-anchors}
+
+\paragraph{Romo \textit{et al.} (2014) --- passive inference on a pressurised
+membrane.}  Layers of human ascending thoracic aortic aneurysm are inflated in a
+bulge test; the deformed shape is captured by stereo digital image correlation;
+and the local stress field is recovered by solving the membrane equilibrium
+equation on the observed surface,
+\begin{equation}
+  \frac{1}{\sqrt g}\bigl(\sqrt g\,\sigma^{\alpha\beta}\vv g_\alpha\bigr)_{,\beta}
+  + p\,\nn = \vv 0,
+  \label{eq:romo}
+\end{equation}
+discretised with triangular shape functions and solved by least squares.
+Equation~\eqref{eq:romo} is \emph{identical} to our balance
+law~\eqref{eq:equil}; the authors state plainly that ``the tension in the wall
+can be determined without the use of a constitutive model'' --- precisely the
+static determinacy of \S\ref{sec:el-determinacy}, here validated on real tissue
+(interior errors $<1.5\%$).  Their method nonetheless requires an \emph{open}
+domain with prescribed boundary tractions, exactly as in cMSM
+(Mar\'in-Llaurad\'o \textit{et al.}, 2023).
+
+\paragraph{Bal \textit{et al.} (2026) --- active-shell forward theory.}  A
+continuum shell theory is derived by coarse-graining a 3D vertex model whose
+faces are active viscoelastic gel surfaces.  The resulting surface Cauchy stress
+(their Eq.~2.19) splits additively into a passive elastic part and an active
+contractile part,
+\begin{equation}
+  \boldsymbol\sigma = \boldsymbol\sigma^{e} + \xi\rho\,\vv g,
+  \label{eq:bal-stress}
+\end{equation}
+with $\xi$ the myosin activity and $\rho$ the cortical density, and the balance
+of momentum (their Eq.~2.20) reads $\nabla\!\cdot\boldsymbol\sigma=0$ tangentially
+and $\boldsymbol\sigma\!:\!\vv k=0$ normally --- again our
+\eqref{eq:tang-equil} and \eqref{eq:laplace-tensor}, with the explicit remark
+that the right-hand side becomes non-zero under a transmural pressure difference.
+Crucially, they show that an \emph{apicobasal asymmetry} of the active tension
+$\xi$ generates bending, and that a Cosserat (through-thickness) kinematics ---
+not a pure membrane --- is required to capture it.
+
+\paragraph{The lineage we complete.}  Romo \textit{et al.} (open dome, passive),
+cMSM (open epithelial domes, active but boundary-pinned), and the present method
+are the \emph{same} inverse procedure: solve the statically determinate membrane
+balance on an observed pressurised shape.  What none of them addresses is the
+\emph{closed, arbitrary-topology} case --- which is exactly the geometry of the
+neural tube.  Filling that gap, with the closed-surface null-mode treatment of
+\S\ref{sec:null-modes}, is the methodological contribution that makes a
+neural-tube tension landscape accessible at all.
+
+%% -------------------------------------------------------------------------
+\subsection{What equilibrium fixes, and what it cannot split}
+\label{sec:nt-decomposition}
+
+Static determinacy (\S\ref{sec:el-determinacy}) guarantees that the inferred
+resultant $\Nb$ is unique --- it is the \emph{total} membrane tension that
+balances the lumen pressure.  But equation~\eqref{eq:bal-stress} decomposes that
+total into a passive elastic and an active contractile contribution,
+\begin{equation}
+  \Nb = \Nb_{\rm elastic} + \Nb_{\rm active},
+  \qquad
+  \Nb_{\rm active} = t\,\xi\rho\,\vv g .
+  \label{eq:nt-split}
+\end{equation}
+Equilibrium constrains the sum but is blind to the split: the same $\Nb$ can be
+produced by a stiff, weakly contractile wall or a compliant, strongly
+contractile one.  This is the central honest statement about a \emph{living}
+tube.  Isolating $\Nb_{\rm active}$ requires either an independent measurement
+(laser ablation, phospho-myosin intensity) or a Bal-type forward model with
+measured material parameters.  The inference therefore delivers a hard
+\emph{upper-envelope} constraint on tissue tension, not a decomposition --- a
+limitation that is itself a result, and one that sharply distinguishes the
+inert-tissue setting of Romo \textit{et al.} from the embryo.
+
+%% -------------------------------------------------------------------------
+\subsection{Two equilibrium-derived signatures of active tension}
+\label{sec:nt-signatures}
+
+Although equilibrium cannot \emph{quantify} the split~\eqref{eq:nt-split}, two
+fields the pipeline already computes act as qualitative \emph{detectors} of the
+active term --- because each takes a value that a purely passive, pressurised
+membrane is forbidden to produce.
+
+\paragraph{(i) Tilt of the principal stress axes off the curvature axes.}
+On an axisymmetric surface under pressure alone, symmetry locks the principal
+stress directions to the curvature directions, so the shear DOF vanishes,
+$r=0$, and the alignment diagnostic
+$\delta=|r|/(|p|+|q|)$ of equation~\eqref{eq:alignment} is near zero (confirmed:
+$1$--$2\%$ on sphere and spheroid, \S\ref{sec:stress-dirs}).  A \emph{systematic}
+tilt of $\vv d_1$ away from the curvature frame --- a coherent, non-random
+$\delta>0$ field --- cannot arise from an isotropic pressure load on a
+revolution; it signals a directional tension whose axis is set by something other
+than the local geometry, i.e.\ oriented active stress (for example
+convergent-extension forces along the anteroposterior axis).  The shear $r$,
+which we previously reported only as a small diagnostic, is thus the natural
+read-out of \emph{anisotropic active tension}: passive aneurysm tissue (Romo
+\textit{et al.}) would show $\vv d_1$ locked to the curvature axes, whereas an
+actively remodelling tube need not.
+
+\paragraph{(ii) Compressive principal stress.}
+A convex surface under positive internal pressure is in tension along
+\emph{both} principal directions: the Young--Laplace
+relation~\eqref{eq:laplace} with $\kappa_1,\kappa_2>0$ and $\Delta p>0$ cannot
+produce $\sigma<0$.  Inferred \emph{compression} ($\sigma_{\min}<0$), which we do
+observe on HH20, therefore cannot be a pressure response on a convex patch; via
+equation~\eqref{eq:bal-stress} it is a signature of the active term overwhelming
+the pressure term, or of incipient buckling --- the same active/bending regime
+Bal \textit{et al.} require a Cosserat shell to describe.  Compressive zones are
+thus candidate markers of the contractile, fold-forming machinery rather than of
+load bearing.
+
+Both signatures invert the usual reading of a stress map: the
+\emph{morphogenetically} interesting vertices are not those of largest tension but
+those where the axes tilt or the minor stress turns compressive.
+
+%% -------------------------------------------------------------------------
+\subsection{Where membrane inference ends and bending begins}
+\label{sec:nt-bending}
+
+Bal \textit{et al.} locate the breakdown of membrane theory precisely where
+apicobasal active asymmetry drives bending --- the hinge points and closing
+folds.  These are high-curvature regions, and they coincide exactly with where
+our own numerics degrade: the resolution analysis (\S\ref{sec:resolution-requirement})
+flags vertices with $h\kappa\gtrsim0.1$ as low-confidence, and the HH20 folds sit
+at $h\kappa\approx0.44$ ($p_{90}$).  The numerical limit and the physical limit
+therefore fall on the \emph{same} regions: where the membrane idealisation is
+least valid (bending dominates, after Bal) is where the GFDM quadratic fit is
+also least reliable.  This lets us state the domain of validity cleanly rather
+than as an apology --- membrane inference is quantitative on the smooth tube body
+and becomes a qualitative fold-detector at the hinges, which is exactly where an
+active Cosserat-shell forward model (Bal-type) would take over.
+
+%% -------------------------------------------------------------------------
+\subsection{From a stress map to a vulnerability map}
+\label{sec:nt-vulnerability}
+
+The headline biological finding of Romo \textit{et al.} is that aneurysm
+\emph{rupture does not occur at the location of maximum stress}: it initiates in a
+\emph{weakened} zone identified by strain localisation and local wall
+\emph{thinning}, and accounting for that thinning (via incompressibility) roughly
+doubled the inferred stress relative to a constant-thickness estimate.  The
+mechanically decisive quantity is stress \emph{relative to local capacity}, not
+absolute stress.
+
+Translated to morphogenesis, the decisive sites for neural-tube shape change
+need not be the peak-tension sites either; they are where tension coincides with a
+locally compliant, thinned, or actively remodelling zone.  This argues for
+reporting not a bare $\sigma$ field but a composite \emph{vulnerability /
+event-likelihood} landscape, overlaying
+\begin{itemize}[nosep]
+  \item the inferred principal tensions $\sigma_1,\sigma_2$ (and the resultants
+        $N_1,N_2$, which are thickness-independent, \S\ref{sec:thickness});
+  \item a measured thickness field $t(\vv x)$ --- the same heterogeneity Romo
+        \textit{et al.} found decisive, and the reason a real $t(\vv x)$ (not the
+        placeholder divisor) is the priority next input;
+  \item the two active signatures of \S\ref{sec:nt-signatures} (axis tilt
+        $\delta$, compressive $\sigma_{\min}$);
+  \item the $h\kappa$ confidence map of \S\ref{sec:resolution-requirement}.
+\end{itemize}
+This is the direct morphogenetic analogue of the Romo ``stress~$+$~thinning''
+rupture map.
+
+%% -------------------------------------------------------------------------
+\subsection{A testable thesis for the HH17\,$\to$\,HH20 transition}
+\label{sec:nt-thesis}
+
+The pieces assemble into a single, falsifiable claim.  The chick neural tube is a
+closed, pressurised, active epithelial shell; equilibrium inference recovers its
+\emph{total} membrane-tension landscape without a constitutive model (extending
+Romo-style and cMSM inference from open domes to closed topology).  Because living
+tension is the sum of a pressure-equilibrating and an actively generated part
+(Bal \textit{et al.}), and equilibrium fixes only the sum, the active component
+must be read indirectly --- through the two forbidden-for-passive signatures of
+\S\ref{sec:nt-signatures}.  The prediction is then:
+\begin{quote}\itshape
+the increase in tension magnitude and anisotropy we observe from HH17 to HH20
+(\,$\sigma_{\max}$ rising ${\sim}1.9\times$, $\sigma_{\min}$ becoming
+${\sim}2.8\times$ more compressive\,) is accompanied by a growing principal-axis
+tilt $\delta$ and by compressive $\sigma_{\min}$ zones that localise to the
+high-curvature folds; these active-signature regions, not the peak-tension
+regions, mark the sites of active shape change.
+\end{quote}
+Each clause is checkable against the saved per-vertex fields, and the contrast
+with passive aneurysm tissue (where $\delta\!\to\!0$ and $\sigma_{\min}>0$
+everywhere) makes the active interpretation discriminating rather than
+descriptive.
+
+%% =========================================================================
+\begin{thebibliography}{Mar\'in-Llaurad\'o et al. (2023)}
+
+\bibitem[Bal et al. (2026)]{bal2026}
+Bal, P.~K., Ouzeri, A., Arroyo, M. (2026).
+Continuum theory for the mechanics of curved epithelial shells by
+coarse-graining an ensemble of active gel cellular surfaces.
+\emph{Journal of the Mechanics and Physics of Solids} \textbf{208}, 106477.
+\href{https://doi.org/10.1016/j.jmps.2025.106477}{doi:10.1016/j.jmps.2025.106477}.
+
+\bibitem[Calladine (1983)]{calladine1983}
+Calladine, C.~R. (1983).
+\emph{Theory of Shell Structures}.
+Cambridge University Press, Cambridge.
+
+\bibitem[Fl\"ugge (1973)]{flugge1973}
+Fl\"ugge, W. (1973).
+\emph{Stresses in Shells}, 2nd ed.
+Springer-Verlag, Berlin.
+
+\bibitem[Mar\'in-Llaurad\'o et al. (2023)]{marin2023}
+Mar\'in-Llaurad\'o, A., Kale, S., Ouzeri, A., et al. (2023).
+Mapping mechanical stress in curved epithelia of designed size and shape.
+\emph{Nature Communications} \textbf{14}.
+\href{https://doi.org/10.1038/s41467-023-38879-7}{doi:10.1038/s41467-023-38879-7}.
+
+\bibitem[Romo et al. (2014)]{romo2014}
+Romo, A., Badel, P., Duprey, A., Favre, J.-P., Avril, S. (2014).
+In vitro analysis of localized aneurysm rupture.
+\emph{Journal of Biomechanics} \textbf{47}(3), 607--616.
+\href{https://doi.org/10.1016/j.jbiomech.2013.12.012}{doi:10.1016/j.jbiomech.2013.12.012}.
+
+\bibitem[Timoshenko \& Woinowsky-Krieger (1959)]{timoshenko1959}
+Timoshenko, S.~P., Woinowsky-Krieger, S. (1959).
+\emph{Theory of Plates and Shells}, 2nd ed.
+McGraw-Hill, New York.
+
+\end{thebibliography}
+
 \end{document}
