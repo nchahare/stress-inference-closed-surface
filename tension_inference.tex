@@ -807,6 +807,13 @@ around $20$--$30\,000$ DOFs (${\sim}7$--$10\,000$ vertices): beyond that
 the iterative path is already faster than the direct one, so a higher
 threshold needlessly leaves mid-size meshes on the slow direct solve.
 
+\paragraph{An independent discretisation.}  The GFDM scheme above is only
+\emph{one} way to discretise the balance law~\eqref{eq:equil}.  A stress-based
+\emph{finite-element} discretisation of the same equation --- the natural twin of
+this least-squares scheme, and a faithful version of the reference cMSM method on
+a \emph{closed} surface --- is developed as a cross-check in
+Section~\ref{sec:fem}.
+
 %% =========================================================================
 \section{Extracting the principal curvature frame}
 \label{sec:pc-frame}
@@ -1714,6 +1721,142 @@ Each clause is checkable against the saved per-vertex fields, and the contrast
 with passive aneurysm tissue (where $\delta\!\to\!0$ and $\sigma_{\min}>0$
 everywhere) makes the active interpretation discriminating rather than
 descriptive.
+
+%% =========================================================================
+\section{Stress-based finite-element discretisation (planned alternative to GFDM)}
+\label{sec:fem}
+
+The generalised finite-difference scheme of Section~\ref{sec:gfdm} is one
+discretisation of the balance law~\eqref{eq:equil}.  This section records the
+formulation of an \emph{independent} finite-element discretisation of the
+\emph{same} equation, chosen as a methodological cross-check.  \textbf{It is a
+decided design, not yet implemented} at the time of writing; the equations and
+choices below are the build specification.
+
+Three questions motivate it.  (i) Is the closed-surface ``lines'' artefact
+(Section~\ref{sec:null-modes}) intrinsic to the statically-indeterminate problem,
+or is it specific to the local weighted-least-squares stencils?  A Galerkin
+scheme on the same mesh isolates the answer.  (ii) Does element integration
+recover the spheroid anisotropy more accurately than pointwise collocation?
+(iii) Because the reference cMSM method (Mar\'in-Llaurad\'o et al., 2023) is
+\emph{itself} a stress-based linear-triangle finite-element method --- restricted
+there to open domes --- this puts cMSM's exact formulation on a \emph{closed}
+surface, testing whether its open-boundary pinning was load-bearing.
+
+%% -------------------------------------------------------------------------
+\subsection{Primal (virtual-work) weak form}
+\label{sec:fem-weak}
+
+Dotting the equilibrium~\eqref{eq:equil} with a vector test field $\vv w$,
+integrating over the closed surface, and integrating by parts via the surface
+divergence theorem (no boundary term on a closed $\Gamma$) gives the
+\emph{principle of virtual work} with the stress as the unknown:
+\begin{equation}
+  a(\NN,\vv w)\;=\;\int_\Gamma \NN : \bm\varepsilon_s(\vv w)\,dS
+  \;=\;\int_\Gamma \Delta p\,(\nn\cdot\vv w)\,dS\;=\;\ell(\vv w),
+  \qquad
+  \bm\varepsilon_s(\vv w)=\tfrac12\bigl(\nabla_{\!s}\vv w+\nabla_{\!s}\vv w^{\!\top}\bigr),
+  \label{eq:fem-weak}
+\end{equation}
+for all admissible $\vv w$: internal virtual work (stress $:$ virtual strain)
+equals the external virtual work of the pressure.  This is the same balance as
+the GFDM residual, written variationally rather than by collocation.
+
+%% -------------------------------------------------------------------------
+\subsection{Finite-element spaces and assembly}
+\label{sec:fem-assembly}
+
+Both fields use continuous piecewise-linear (P1) interpolation on the surface
+triangulation, in ambient Cartesian components.
+
+\paragraph{Trial space (stress).}  Per vertex $i$ the three DOFs $(p_i,q_i,r_i)$
+encode $\NN_i = p_i\,\vv v_1\tp\vv v_1 + q_i\,\vv v_2\tp\vv v_2
++ r_i(\vv v_1\tp\vv v_2+\vv v_2\tp\vv v_1)$ in the local frame
+$(\vv v_1,\vv v_2,\nn)$ (Section~\ref{sec:geometry}), so $\NN_i\nn_i=\vv0$ by
+construction.  The field is $\NN(\vv x)=\sum_i\varphi_i(\vv x)\,\NN_i$.
+
+\paragraph{Test space (virtual displacement).}  Continuous P1 vector fields with
+ambient nodal basis $\{\vv e_d\,\varphi_j\}$, $d\in\{1,2,3\}$.  With $n$ vertices
+this gives $3n$ trial DOFs and $3n$ test functions --- a \emph{square}
+$3n\times3n$ system, exactly the count of cMSM.
+
+\paragraph{Element block.}  On a triangle $T$ of area $A_T$, the hat-function
+surface gradient $\vv g_j=\nabla_{\!s}\varphi_j|_T = (\nn_T\times(\vv x_k-\vv
+x_i))/(2A_T)$ is constant and lies in the plane of $T$.  For the test function
+$\vv w=\vv e_d\varphi_j$, $\bm\varepsilon_s(\vv w)=\mathrm{sym}(\vv e_d\tp\vv
+g_j)$ and, since $\NN$ is symmetric, $\NN:\bm\varepsilon_s(\vv w)=(\NN\,\vv
+g_j)_d$.  Using $\int_T\varphi_m\,dS=A_T/3$, the element contribution is
+\begin{equation}
+  a\big|_T(\NN,\,\vv e_d\varphi_j)
+  = \frac{A_T}{3}\sum_{m\in T}\bigl(\NN_m\,\vv g_j\bigr)_d,
+  \label{eq:fem-block}
+\end{equation}
+which expands through each node's frame into the $(p_m,q_m,r_m)$ columns and
+scatters into the global stiffness $K$.
+
+\paragraph{Load vector.}  With nodal outward normals $\nn_m$ and the P1 mass
+matrix $M^T_{jm}=\tfrac{A_T}{12}(1+\delta_{jm})$,
+\begin{equation}
+  \ell(\vv e_d\varphi_j)=\Delta p\sum_T\sum_{m\in T} n_{m,d}\,M^T_{jm}.
+  \label{eq:fem-load}
+\end{equation}
+
+%% -------------------------------------------------------------------------
+\subsection{Solving the singular system and recovering stresses}
+\label{sec:fem-solve}
+
+$K$ is square but \emph{singular} on a closed surface: its null space is the
+finite-dimensional space of self-equilibrating stress states
+(Section~\ref{sec:null-modes}).  The load~\eqref{eq:fem-load} is nonetheless
+consistent, because the net pressure force and torque on a closed surface vanish
+(the right null space of $K^\top$ are the rigid virtual displacements, for which
+$\ell=0$).  The solve proceeds in two stages:
+\begin{enumerate}[label=(\roman*),nosep]
+  \item \textbf{Raw, minimum-norm.}  Solve $K\vv s=\vv b$ with \texttt{lsqr},
+        which returns the minimum-norm least-squares solution (no regularisation).
+        The headline diagnostic is whether the raw field carries the same
+        triangulation ``lines'' as the raw GFDM solve.
+  \item \textbf{Regularised.}  Minimise $\|K\vv s-\vv b\|^2+\lambda^2\|R\vv
+        s\|^2$ with the \emph{same} roughness operator $R$ and weight
+        $\lambda=0.05$ as the GFDM solve (Section~\ref{sec:tikhonov}), for a
+        controlled side-by-side.
+\end{enumerate}
+Principal stresses are then $\sigma_1,\sigma_2 = \mathrm{eig}
+\bigl[\begin{smallmatrix}p&r\\ r&q\end{smallmatrix}\bigr]/t$, identical
+post-processing to the GFDM pipeline.
+
+%% -------------------------------------------------------------------------
+\subsection{Design decisions and validation plan}
+\label{sec:fem-decisions}
+
+The configuration is fixed as follows (alternatives weighed in the working
+notes):
+\begin{itemize}[nosep]
+  \item \textbf{Formulation:} primal virtual-work~\eqref{eq:fem-weak} ---
+        the faithful cMSM-style stress FEM.  A \emph{least-squares} FEM (SPD,
+        constitutive-free, the closest twin of GFDM) and a \emph{mixed
+        Hellinger--Reissner} scheme (structurally null-mode-free, but requiring a
+        compliance tensor --- hence not constitutive-free --- and
+        symmetric-stress $H(\mathrm{div})$ surface elements with no package
+        support) were the runners-up.
+  \item \textbf{Representation:} P1 nodal stress in the per-vertex local frame
+        ($3$ DOF, identical to GFDM, for a like-for-like comparison).
+  \item \textbf{Regulariser:} the GFDM roughness operator (Section~\ref{sec:tikhonov}).
+  \item \textbf{Implementation:} hand-rolled with \texttt{scipy.sparse}
+        (consistent with the no-framework rule; the symmetric-tangential-tensor
+        unknown is non-standard, so the tensor integrands are custom regardless
+        of package), reusing the existing mesh, frame, analytic-reference and
+        plotting infrastructure.
+  \item \textbf{Mesh:} IcoSphere, consistent with the rest of the suite.
+\end{itemize}
+Validation follows the project rule of checking every new path against the
+analytic sphere first: \textbf{sphere} ($R=1$, $\Delta p=20$\,Pa, $t=0.05$)
+expecting $\sigma_1=\sigma_2=200$\,Pa, reporting the mean error and the
+deviatoric standard deviation (the lines indicator) raw vs regularised and
+head-to-head with GFDM (Section~\ref{sec:benchmarks}); then the \textbf{prolate
+spheroid} ($2{:}1$) for the equatorial anisotropy ratio $1.75$.  Agreement with
+GFDM would confirm the lines are intrinsic to the indeterminate closed-surface
+problem rather than a stencil artefact; a discrepancy would localise the cause.
 
 %% =========================================================================
 \begin{thebibliography}{Mar\'in-Llaurad\'o et al. (2023)}

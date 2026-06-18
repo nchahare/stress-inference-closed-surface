@@ -188,6 +188,25 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
   thesis: HH17→HH20 tension rise/anisotropy is accompanied by growing δ and compressive zones
   localising at high-`h·κ` folds; those active-signature regions (not peak-tension) mark active
   shape change. **TODO when ready: verify δ + σ_min<0 actually localise coherently on saved HH20.**
+- **Stress-based FEM — DECIDED, NOT YET BUILT (tension_inference §12; `membrane_stress_fem.py`
+  to be written):** an alternative discretisation of the SAME balance law `div_s N+Δp·n=0`, to
+  test whether the closed-surface "lines" are intrinsic to the indeterminacy or a GFDM-stencil
+  artefact (and to put cMSM's exact formulation on a CLOSED surface). **Decisions (user choices):**
+  formulation = **primal virtual-work / cMSM-style** (`∫ N:ε_s(w)=∫ Δp·n·w`, P1 nodal stress
+  trial + P1 vector test → SQUARE 3n×3n system); package = **hand-rolled `scipy.sparse`** (no
+  framework; tensor integrands are custom regardless); representation = **P1 nodal (p,q,r) in the
+  per-vertex local frame** (same DOF as GFDM for like-for-like); regulariser = the GFDM roughness
+  op, λ=0.05; mesh = IcoSphere. Runners-up **ruled out**: LSFEM (SPD, constitutive-free, GFDM twin
+  — kept as fallback) and mixed Hellinger–Reissner (structurally null-mode-free BUT needs a
+  compliance ⇒ not constitutive-free, and symmetric-stress H(div) surface elements have no package
+  support ⇒ research-grade). **Assembly:** per-tri P1 surface-grad `g_j=(n_T×(x_k−x_i))/(2A_T)`
+  const per triangle; element block `(A_T/3)·Σ_{m∈T}(N_m g_j)_d`; consistent load via P1 mass
+  `M^T_jm=(A_T/12)(1+δ)`. **Solve:** K is square but SINGULAR (closed-surface null modes); load is
+  consistent (net pressure force/torque=0); (i) raw min-norm via `lsqr` (look for lines), then
+  (ii) Tikhonov `‖Ks−b‖²+λ²‖Rs‖²`. σ₁,σ₂=eig([[p,r],[r,q]])/t (same post-proc). **Validate sphere
+  first** (σ=200 Pa @ dp=20,t=0.05; deviatoric-std = lines indicator) → spheroid (ratio 1.75),
+  head-to-head with GFDM. Reuse vedo IcoSphere+`mesh.cells`, `compute_vertex_frames` (+outward
+  flip), `analytic_axisym`, `report`, `show` from `membrane_stress_fd.py`.
 
 ## Files
 - `sphere_curvature.py` — per-vertex curvature, normals, local axes (`compute_vertex_frames`).
@@ -236,7 +255,8 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
   §10.1 benchmarks, §10.2 convergence, §10.3 linearity, §10.4 residual maps, §10.7 mesh-resolution
   (`h·κ`) + timing; §10.5/10.6/10.8 (shear, smoothing, FEM) still proposed. **§11 biological
   interpretation: neural-tube tension landscape** — NEW, synthesises Romo 2014 + Bal 2026 (see
-  key-facts bullet below).
+  key-facts bullet below). **§12 stress-based FEM chapter** — NEW, **planned alternative
+  discretisation, NOT yet implemented** (build spec; see key-facts bullet below).
 - `benchmark_analytic.py` — §10.1 figure: sphere/spheroid/capsule vs exact (latitude scatter).
 - `convergence_study.py` — §10.2: error & spurious-deviatoric vs h (subdiv 3-6).
 - `linearity_test.py` — §10.3: σ ∝ Δp/t over 6 (Δp,t) combos.

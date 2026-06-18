@@ -143,7 +143,12 @@ the neural-tube tension landscape** synthesising the two added reference papers
 (Romo et al. 2014 passive bulge-inflation inference; Bal et al. 2026 active-gel shell theory):
 the shared equilibrium core, the total-tension vs elastic/active split equilibrium cannot
 resolve, two equilibrium-derived active signatures (principal-axis tilt and compressive
-`σ_min`), and a falsifiable HH17→HH20 thesis.
+`σ_min`), and a falsifiable HH17→HH20 thesis. Finally a **§12 stress-based FEM chapter**
+(**planned alternative discretisation, not yet implemented**): the primal virtual-work weak
+form `∫ N:ε_s(w) = ∫ Δp·n·w`, P1 nodal stress + P1 vector test → square 3n system (faithfully
+cMSM on a *closed* surface), element assembly + consistent load, the singular-system solve
+(min-norm `lsqr` then Tikhonov), and the design decisions (formulation = primal virtual-work,
+hand-rolled `scipy.sparse`, P1 local-frame DOFs) + sphere-first validation plan.
 
 ```powershell
 # per-vertex principal curvature frame: kappa1, kappa2, e1, e2 (world R3), n
@@ -329,6 +334,7 @@ Discretization:
 Last updated: **2026-06-18 (UTC-04:00)**
 
 ### Done
+- [x] **Stress-based FEM methodology decided + documented** (`tension_inference` **§12**, planned not-yet-built) — chose **primal virtual-work (cMSM-style)** weak form `∫ N:ε_s(w)=∫ Δp·n·w`, **hand-rolled `scipy.sparse`**, P1 nodal local-frame DOFs (square 3n system); documented element assembly, consistent load, singular-system solve (min-norm `lsqr` → Tikhonov), and the sphere-first validation plan. Runners-up (LSFEM, mixed Hellinger–Reissner) weighed and recorded — _2026-06-18_
 - [x] **`tension_inference` conceptual expansion** — added **§1 elastostatics framing** (problem class, static determinacy, four method families, M1/M2/M3 constitutive ladder), **§3.4 fluid-vs-elastic limit** (`N=γP`/Young–Laplace + Marangoni; heterogeneous tension forces deviatoric shear; 1-dof-fluid vs 3-dof-elastic determinacy), **§11 neural-tube interpretation** synthesising the two added reference papers (Romo et al. 2014 passive bulge-inflation; Bal et al. 2026 active-gel shell) — total-vs-active split, tilt + compressive-`σ_min` active signatures, falsifiable HH17→HH20 thesis — and a **bibliography**. All section numbers shifted +1; PDF recompiled — _2026-06-18_
 - [x] Selected `fem_env` (scikit-fem 12.0.1, Python 3.11); installed `vedo` (git, 2026.6.2.dev7) + `vtk 9.6.2`; `scipy 1.14.1` present — _2026-06-15_
 - [x] `sphere_curvature.py` — per-vertex curvature, normals, local axes; validated vs analytic sphere (radii ~1–2% @res40, ~0.5% @res80; normals <1.6° of radial; correct R-scaling & convergence) — _2026-06-15_
@@ -412,6 +418,7 @@ M1+M2 on **HH17 (decimated to HH20's 3766 pts) + HH20** for the real-mesh compar
   tension/compression split — exactly why the inference solve is needed there.
 
 ### To do
+- [ ] **Implement the §12 stress-based FEM** (`membrane_stress_fem.py`) — primal virtual-work / cMSM-style, hand-rolled `scipy.sparse`, P1 nodal local-frame DOFs; validate on sphere (σ=200 Pa, deviatoric-std lines indicator) then spheroid, head-to-head with GFDM. Tests whether the closed-surface "lines" are intrinsic (indeterminacy) or a GFDM-stencil artefact, and puts cMSM's exact formulation on a closed surface.
 - [ ] **Verify the §11 neural-tube thesis on saved HH20 fields** — check whether the two active signatures (principal-axis tilt `δ=|r|/(|p|+|q|)` and compressive `σ_min<0`) actually localise *coherently* (and to the high-`h·κ` folds) rather than as noise, before the interpretation goes in a manuscript. This is the data-check deferred from the conceptual write-up.
 - [ ] **Thickness field** — run with measured non-uniform `t(x)` vs uniform placeholder; this is the headline R2 result
 - [ ] **Hyperelastic FEM cross-check** (R3 / method M3) — **run our own neo-Hookean FEM** inflations of our geometries (sphere, ellipsoid, neural tube) at **Δp=20 Pa** and compare σ₁,σ₂ to the GFDM inference. The archived cMSM `.mat` fields are **not** reusable as ground truth — their geometries, material parameters, and 400 Pa loading differ from ours; the comparison must use a forward model consistent with our inference inputs.
@@ -443,7 +450,7 @@ M1+M2 on **HH17 (decimated to HH20's 3766 pts) + HH20** for the real-mesh compar
 - `linearity_test.py` — §10.3 σ ∝ Δp/t check over 6 (Δp,t) combos → `out/linearity_test.png`
 - `residual_test.py` — §10.4 per-vertex equilibrium-residual surface maps (sphere/spheroid/capsule) → `out/residual_map.png`
 - `mesh_resolution_study.py` — §10.7 error vs dimensionless `h·κ` with embryo band + λ tradeoff U-curve → `out/mesh_resolution_study.png`
-- `tension_inference.tex` / `.pdf` — standalone derivation: **§1 elastostatics framing** (problem class, static determinacy, method families, constitutive ladder), surface geometry, membrane balance (normal + tangential), thickness role, **§3.4 fluid-vs-elastic limit** (`N=γP`/Marangoni; heterogeneous tension forces shear), GFDM (+ solver choice), curvature-frame extraction, principal stress directions, the §10 validation suite (benchmarks, convergence, linearity, residual maps, resolution/timing), **§11 neural-tube interpretation** (Romo 2014 + Bal 2026: total-vs-active split, tilt/compression active signatures, HH17→HH20 thesis), and a **bibliography**
+- `tension_inference.tex` / `.pdf` — standalone derivation: **§1 elastostatics framing** (problem class, static determinacy, method families, constitutive ladder), surface geometry, membrane balance (normal + tangential), thickness role, **§3.4 fluid-vs-elastic limit** (`N=γP`/Marangoni; heterogeneous tension forces shear), GFDM (+ solver choice), curvature-frame extraction, principal stress directions, the §10 validation suite (benchmarks, convergence, linearity, residual maps, resolution/timing), **§11 neural-tube interpretation** (Romo 2014 + Bal 2026: total-vs-active split, tilt/compression active signatures, HH17→HH20 thesis), **§12 stress-based FEM chapter** (planned alternative discretisation: primal virtual-work / cMSM-style, P1 square system, build spec + validation plan), and a **bibliography**
 - `show_e2_spheroid.py` — sign-consistency visualiser for **e₂** on spheroid (cyan=consistent, red=flipped; 2 residual singularities at umbilic poles)
 - `show_e2_sphere.py` — sign-consistency visualiser on sphere (totally umbilic worst case; 314 inconsistent after BFS — hairy ball theorem)
 - `show_capsule.py` — capsule mesh builder (`make_capsule`) + three-region curvature validation + sign-consistency viewer (mesh coloured by discriminant d=|κ₁−κ₂|/2)
