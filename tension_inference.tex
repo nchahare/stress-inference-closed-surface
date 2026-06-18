@@ -787,29 +787,75 @@ produces physically correct stresses before using the output for
 biological interpretation.
 
 %% -------------------------------------------------------------------------
-\subsection{Analytic benchmarks (already partly done)}
+\subsection{Analytic benchmarks}
+\label{sec:benchmarks}
+
+All three analytic cases have been run at IcoSphere subdiv-4 ($n=2562$),
+$\Delta p=20$\,Pa, $t=0.05$, depth\,=\,3, $\lambda=0.05$, with 12-iteration
+Laplacian post-smoothing ($\alpha=0.5$).
+Figure~\ref{fig:benchmark} shows the full per-vertex distributions;
+Table~\ref{tab:benchmark} summarises the quantitative errors.
 
 \begin{enumerate}[label=(\alph*)]
-  \item \textbf{Sphere.}  $\sigma_1=\sigma_2=\Delta p R/2t$ everywhere.
-        Check: median of $(\sigma_1+\sigma_2)/2$ matches analytic; any
-        deviation is a measure of the null-mode bias.
-        \emph{Status: done; median error $<1\%$, spurious deviatoric $\sim4\%$.}
+  \item \textbf{Sphere} ($R=1$).  Analytic $\sigma_1=\sigma_2=\Delta p R/2t=200$\,Pa
+        everywhere.  The GFDM mean stress is $202.1$\,Pa ($1.0\%$ error).
+        The spurious deviatoric (std of $(\sigma_1-\sigma_2)/2$) is $0.56$\,Pa
+        after smoothing — essentially zero, confirming the sphere is the correct
+        null test.  \emph{Status: complete.}
 
-  \item \textbf{Prolate spheroid.}  Analytic $\sigma_{\rm hoop}$ and
-        $\sigma_{\rm merid}$ from the axisymmetric membrane formula.
-        Check that both components and the 1.75 hoop/merid ratio are
-        reproduced away from the poles.
-        \emph{Status: done; $\sigma_{\rm max}$ error $\sim3\%$,
-        $\sigma_{\rm min}$ error $\sim17\%$ (pre-smoothing).}
+  \item \textbf{Prolate spheroid} ($a=2$, $b=1$, long axis $x$).
+        Analytic stresses from the axisymmetric membrane formula
+        (meridional $\sigma_\phi=\Delta p\,r_2/2t$,
+        hoop $\sigma_\theta=\Delta p\,r_2(1-r_2/2r_1)/t$, where
+        $r_1=J^3/ab$, $r_2=bJ/a$, $J=\sqrt{a^2\sin^2\!\beta+b^2\cos^2\!\beta}$).
+        At the equator the hoop/merid ratio is $350/200=1.75$.
+        Smoothed GFDM errors in the equatorial belt
+        ($|\beta-\pi/2|<\pi/3$): $\sigma_{\max}$ error $1.5\%$,
+        $\sigma_{\min}$ error $1.9\%$.  \emph{Status: complete.}
 
-  \item \textbf{Pressurised cylinder (capsule body).}
-        Analytic: $\sigma_{\rm hoop}=\Delta p R/t$,
-        $\sigma_{\rm axial}=\Delta p R/2t$.
-        The capsule mesh already implemented; stress on the cylinder body
-        should match within a few percent.
-        \emph{Status: done; $\sigma_{\rm max}\approx423$ vs analytic 400
-        (6\%); $\sigma_{\rm min}\approx204$ vs analytic 200 ($2\%$).}
+  \item \textbf{Pressurised cylinder / capsule} ($R=1$, $H=2$).
+        Cylinder-body analytics: $\sigma_{\rm hoop}=\Delta p R/t=400$\,Pa,
+        $\sigma_{\rm axial}=\Delta p R/2t=200$\,Pa; caps approach
+        the sphere value $200$\,Pa.
+        Smoothed GFDM on the cylinder body: $\sigma_{\rm hoop}=419$\,Pa ($5\%$),
+        $\sigma_{\rm axial}=204$\,Pa ($2\%$).  The hoop error is larger because
+        the cylinder-junction stencils blend axial and circumferential curvature.
+        \emph{Status: complete.}
 \end{enumerate}
+
+\begin{figure}[ht]\centering
+  \includegraphics[width=\textwidth]{out/benchmark_analytic.png}
+  \caption{Analytic benchmark: GFDM (Laplacian-smoothed) vs exact membrane
+  stresses.  \textbf{Left}: sphere — histogram of $\sigma_1$ raw (blue) and
+  smoothed (orange); dashed line at analytic 200\,Pa; smoothing halves the
+  spread.  \textbf{Centre}: prolate spheroid — per-vertex $\sigma_1$ (blue)
+  and $\sigma_2$ (red) scatter vs latitude $\beta$, with analytic curves
+  (solid lines); good agreement across the surface except near the umbilic
+  poles ($\beta=0,\pi$) where the curvature frame is undefined.
+  \textbf{Right}: capsule — scatter vs long-axis coordinate; dashed lines
+  mark the analytic cylinder hoop (400\,Pa) and axial/cap (200\,Pa) values;
+  vertical dotted lines mark the cylinder/cap boundary.}
+  \label{fig:benchmark}
+\end{figure}
+
+\begin{table}[ht]\centering
+\caption{Benchmark errors (Laplacian-smoothed GFDM, subdiv-4, $\Delta p=20$\,Pa,
+$t=0.05$).  Spheroid errors are computed over the equatorial belt
+$|\beta-\pi/2|<\pi/3$; capsule errors over the cylinder body $|x|<0.85H$.}
+\label{tab:benchmark}
+\begin{tabular}{llrrr}
+\toprule
+Case & Field & Analytic (Pa) & Computed (Pa) & Error \\
+\midrule
+Sphere          & mean stress $(\sigma_1+\sigma_2)/2$ & 200.0 & 202.1 & 1.0\% \\
+                & deviatoric std $(\sigma_1-\sigma_2)/2$ & 0    & 0.56  & —    \\[4pt]
+Spheroid (equat.) & $\sigma_{\max}$ & 301.2 & 305.6 & 1.5\% \\
+                  & $\sigma_{\min}$ & 178.9 & 175.6 & 1.9\% \\[4pt]
+Capsule (cyl.)  & $\sigma_{\rm hoop}$  & 400.0 & 419.4 & 5.0\% \\
+                & $\sigma_{\rm axial}$ & 200.0 & 204.1 & 2.0\% \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 %% -------------------------------------------------------------------------
 \subsection{Convergence under mesh refinement}
