@@ -145,7 +145,12 @@ def solve_membrane(mesh: vedo.Mesh, dp: float, t: float,
         bvec = L.T @ rhs
         S    = spla.spsolve(A, bvec)
 
-    resid = np.linalg.norm(L @ S - rhs) / np.linalg.norm(rhs)
+    res_vec = L @ S - rhs                       # length 3n, ordered [x(n); y(n); z(n)]
+    resid   = np.linalg.norm(res_vec) / np.linalg.norm(rhs)
+    # per-vertex equilibrium residual: magnitude of the 3 ambient components at
+    # each vertex, normalised by the local load |b_i| = dp (since |n_i| = 1).
+    n_v       = len(pts)
+    resid_pv  = np.sqrt((res_vec.reshape(3, n_v) ** 2).sum(axis=0)) / dp
 
     # ---- 5. Extract principal stresses ---------------------------------------- #
     # DOFs in the principal curvature frame: N = p e1*e1 + q e2*e2 + r sym(e1*e2)
@@ -180,7 +185,7 @@ def solve_membrane(mesh: vedo.Mesh, dp: float, t: float,
         delta=delta,
         sigma1=sigma1, sigma2=sigma2, N1=N1, N2=N2,
         d1=d1, d2=d2,
-        resid=resid,
+        resid=resid, resid_pv=resid_pv,
     )
 
 
@@ -287,6 +292,7 @@ def save_results(res: dict, path_prefix: str, mesh: vedo.Mesh,
         # diagnostics
         delta=res["delta"],          # |r|/(|p|+|q|): stress-curvature axis misalignment
         resid=np.array(res["resid"]),
+        resid_pv=res.get("resid_pv", np.zeros(n)),  # per-vertex equilibrium residual / dp
         # loading and solve parameters
         dp=np.array(dp, dtype=float),
         t_field=t_field,             # per-vertex thickness (Pa/m²); scalar → uniform
@@ -305,7 +311,7 @@ def save_results(res: dict, path_prefix: str, mesh: vedo.Mesh,
     mc = mesh.clone()
     scalar_fields = [
         "kappa1", "kappa2", "H", "K",
-        "p", "q", "r", "delta",
+        "p", "q", "r", "delta", "resid_pv",
         "N1", "N2", "sigma1", "sigma2",
         "sigma1_smooth", "sigma2_smooth", "N1_smooth", "N2_smooth",
     ]

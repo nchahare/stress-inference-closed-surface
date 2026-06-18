@@ -1007,6 +1007,7 @@ proportional to $t$ by construction.  The small offset from the sphere analytic
 
 %% -------------------------------------------------------------------------
 \subsection{Equilibrium residual}
+\label{sec:resid}
 
 The relative residual
 \begin{equation}
@@ -1017,6 +1018,60 @@ $\lesssim0.2$ on real irregular meshes (which have coarser, non-uniform
 stencils).  Values significantly above these thresholds signal either
 a stencil quality problem (too few neighbours, poor conditioning) or a
 breakdown of the membrane assumption.
+
+The test was run on all three analytic geometries at subdiv-4,
+$\Delta p=20$\,Pa, $t=0.05$, depth\,$=3$, $\lambda=0.05$
+(Table~\ref{tab:resid}).  In addition to the global $\varepsilon$ we
+compute the \emph{per-vertex} residual
+\begin{equation}
+  \varepsilon_i = \frac{\bigl\|(L\vv{s}-\vv{b})_i\bigr\|}{|\vv{b}_i|}
+                = \frac{1}{\Delta p}
+                  \Bigl(\textstyle\sum_{a}(L\vv{s}-\vv{b})_{a,i}^2\Bigr)^{1/2},
+\end{equation}
+which localises where equilibrium is least well satisfied
+(Figure~\ref{fig:resid}).
+
+\begin{table}[ht]\centering
+\caption{Equilibrium residual (subdiv-4, $\Delta p=20$\,Pa, $t=0.05$).
+Global $\varepsilon$ and per-vertex $\varepsilon_i$ percentiles.
+Threshold for analytic meshes: $\varepsilon\lesssim10^{-2}$.}
+\label{tab:resid}
+\begin{tabular}{lrrrrl}
+\toprule
+Geometry & $n$ & global $\varepsilon$ & median $\varepsilon_i$ & $p_{95}\,\varepsilon_i$ & status \\
+\midrule
+Sphere ($R=1$)        & 2562 & $6.6\times10^{-3}$ & $4.8\times10^{-3}$ & $1.5\times10^{-2}$ & within threshold \\
+Spheroid ($a{=}2,b{=}1$) & 2562 & $1.8\times10^{-2}$ & $1.0\times10^{-2}$ & $3.7\times10^{-2}$ & marginally above \\
+Capsule ($R{=}1,H{=}2$)  & 2522 & $5.0\times10^{-3}$ & $3.7\times10^{-3}$ & $9.2\times10^{-3}$ & within threshold \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[ht]\centering
+  \includegraphics[width=\textwidth]{out/residual_map.png}
+  \caption{Per-vertex equilibrium residual $\varepsilon_i$ (log scale)
+  mapped onto each surface.  \textbf{Sphere}: the residual traces the
+  icosahedral triangulation — the same null-mode fingerprint discussed in
+  \S\ref{sec:null-modes}, confirming the residual is dominated by the
+  discretisation, not a physical imbalance.  \textbf{Spheroid}: the streaks
+  stretch along the elongated mesh; the global $\varepsilon$ rises slightly
+  above $10^{-2}$ because the anisotropic stencils are less uniform.
+  \textbf{Capsule}: the residual is low on the cylinder body and caps but
+  spikes in two bands at the cylinder/cap junction ($|x|=H$), where the
+  curvature jumps from $(\kappa_1,\kappa_2)=(1/R,0)$ to $(1/R,1/R)$ and the
+  stencils straddle two curvature regimes — a clear, geometrically localised
+  signature of where the membrane discretisation is most strained.}
+  \label{fig:resid}
+\end{figure}
+
+\noindent
+All three geometries meet (or, for the spheroid, marginally exceed) the
+$10^{-2}$ analytic threshold, and the residual maps confirm that the
+remaining imbalance is concentrated at known difficult locations —
+umbilic poles, anisotropic stencils, and curvature discontinuities —
+rather than spread as a systematic bias.  The spheroid's slight excess is a
+stencil-uniformity effect, not a modelling error; it decreases under mesh
+refinement (\S\ref{sec:validation-checks}, convergence).
 
 %% -------------------------------------------------------------------------
 \subsection{Shear diagnostic on a non-symmetric surface}
