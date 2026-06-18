@@ -143,7 +143,7 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
   pattern (low-k), which a gradient penalty can't kill without flattening the real signal; their
   penalty relies on the open-dome pinned boundary we don't have. So **do NOT adopt cMSM reg** —
   Laplacian smoothing is necessary and sufficient. Details in `stress_estimation.tex` §6.
-- **Mesh resolution requirement (embryo) — `mesh_resolution_study.py`, tension_inference §9.7.**
+- **Mesh resolution requirement (embryo) — `mesh_resolution_study.py`, tension_inference §10.7.**
   The controlling variable is the dimensionless **`h·κ`** (mesh spacing × curvature = 1/elements-
   per-curvature-radius). Error vs `h·κ`: sphere needs `h·κ≲0.05` (~20 elem/radius) for ~3%;
   spheroid more forgiving (<4% at `h·κ≈0.18`). **HH20 embryo (n=3766) sits at h·κ≈0.17 median,
@@ -162,6 +162,32 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
   slow direct path (267s) when lsqr would be faster — lower the threshold (~20–30k dof) so sd5+
   use iterative. Embryo (n=3766, ~11k dof) ≈ 15–30s direct. A 4e4-vertex adaptive target ≈ sd6
   territory (~9 min, lsqr).
+- **Two added reference papers (root PDFs), bracket our method (tension_inference §11):**
+  **Romo et al. 2014** (*J. Biomech.* 47(3):607–616, ATAA bulge-inflation) = the SAME inverse
+  method on real tissue — their Eq.(6) IS our `div_s N+Δp·n=0`, solved nodally, explicitly
+  "without a constitutive model"; open dome w/ boundary tractions (like cMSM); **passive**;
+  headline = **rupture ≠ max-stress location** (it's where stress meets local thinning/weakness).
+  **Bal et al. 2026** (*JMPS* 208:106477, active-gel→continuum shell) = forward active theory;
+  stress `σ=σ_elastic+ξρg` (myosin active term ξ); needs Cosserat (through-thickness) for
+  apicobasal-asymmetry **bending**. Lineage we complete: Romo/cMSM (open) → us (closed/arbitrary
+  = the niche).
+- **Fluid-vs-elastic / heterogeneous tension (tension_inference §3.4 — conceptual key fact):**
+  a CLEAN FLUID interface has isotropic `N=γP`; tangential equilibrium then demands `∇_s γ=0`,
+  so a static bubble CANNOT hold heterogeneous tension (gradient = unbalanced Marangoni force →
+  flow homogenises it). On a SOLID-LIKE membrane `N` is a full tensor, and a varying scalar
+  tension `N=γ(x)P+N_dev` is only in tangential equilibrium if `∇_s γ` is balanced by
+  `div_s N_dev` ⇒ **heterogeneous tension FORCES anisotropy/shear** (this is why `r≠0` and d₁
+  tilts off the curvature axes on general meshes). Determinacy by dof-count: fluid = 1 unknown
+  (over-constrained to uniform), elastic = 3 unknowns vs 3 eqs (the real inverse problem). The
+  inference is meaningful ONLY because the tissue is solid-like.
+- **Neural-tube novel angle (tension_inference §11, NOT YET data-verified):** inference gives the
+  TOTAL membrane tension; static determinacy fixes the sum but CANNOT split `N=N_elastic+N_active`
+  (Bal) — need ablation/pMLC or a forward model for that. Two equilibrium-derived **active
+  signatures** we ALREADY compute (forbidden for a passive pressurised convex membrane):
+  (i) **principal-axis tilt** (shear `δ=|r|/(|p|+|q|)`) and (ii) **compressive σ_min<0**. Testable
+  thesis: HH17→HH20 tension rise/anisotropy is accompanied by growing δ and compressive zones
+  localising at high-`h·κ` folds; those active-signature regions (not peak-tension) mark active
+  shape change. **TODO when ready: verify δ + σ_min<0 actually localise coherently on saved HH20.**
 
 ## Files
 - `sphere_curvature.py` — per-vertex curvature, normals, local axes (`compute_vertex_frames`).
@@ -196,19 +222,26 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
 - `surface_fd.py` also has `build_derivative_operators` → 1st+2nd derivative ops (g_xi,g_eta,h_xixi,h_xieta,h_etaeta).
 - `stress_estimation.tex` / `.pdf` — equations, method, results (compile with `pdflatex` TWICE
   for refs; MiKTeX present). Embeds figures from `out/`.
-- `tension_inference.tex` / `.pdf` — standalone mathematical derivation (continuously updated).
-  Covers: surface geometry, membrane stress model + thickness role (§2.3), balance of linear
-  momentum (GFDM trick), principal curvature frame solve (§4.3), static indeterminacy + null
-  modes / mesh-dependent pattern + Rician bias (§4.5), Tikhonov regularisation + direct-vs-lsqr
-  solver (§4.6), principal stress directions d₁/d₂ extraction (§6), and the **§9 validation
-  suite (mostly run with figures)**: §9.1 benchmarks, §9.2 convergence, §9.3 linearity, §9.4
-  residual maps, §9.7 mesh-resolution (`h·κ`) + timing; §9.5/9.6/9.8 (shear, smoothing, FEM)
-  still proposed.
-- `benchmark_analytic.py` — §9.1 figure: sphere/spheroid/capsule vs exact (latitude scatter).
-- `convergence_study.py` — §9.2: error & spurious-deviatoric vs h (subdiv 3-6).
-- `linearity_test.py` — §9.3: σ ∝ Δp/t over 6 (Δp,t) combos.
-- `residual_test.py` — §9.4: per-vertex equilibrium-residual surface maps (vedo 3-panel).
-- `mesh_resolution_study.py` — §9.7: error vs `h·κ` (embryo band) + λ tradeoff U-curve.
+- `tension_inference.tex` / `.pdf` — standalone mathematical derivation (continuously updated;
+  has a **bibliography** now: Bal 2026, Calladine, Flügge, Marín-Llauradó 2023, Romo 2014,
+  Timoshenko). **NOTE: the new front section shifted ALL section numbers +1** (sectioning was
+  re-derived 2026-06-18). Current layout: **§1 elastostatics framing** (problem class, governing
+  eq + 2 projections, static determinacy, 4 method families, constitutive ladder M1/M2/M3 — NEW),
+  §2 surface geometry, §3 membrane stress model (thickness role **§3.3**; **§3.4 fluid-vs-elastic
+  limit** — NEW: `N=γP` Young-Laplace + Marangoni, heterogeneous tension FORCES anisotropy/shear,
+  1-dof fluid vs 3-dof elastic determinacy), §4 balance of momentum (GFDM trick), §5 GFDM
+  discretisation (principal curvature frame solve **§5.3**, null modes + mesh pattern + Rician
+  bias **§5.5**, Tikhonov + direct-vs-lsqr **§5.6**), §6 curvature frame, §7 principal stress
+  directions d₁/d₂, §8 summary, §9 validation cases, **§10 validation suite (mostly run)**:
+  §10.1 benchmarks, §10.2 convergence, §10.3 linearity, §10.4 residual maps, §10.7 mesh-resolution
+  (`h·κ`) + timing; §10.5/10.6/10.8 (shear, smoothing, FEM) still proposed. **§11 biological
+  interpretation: neural-tube tension landscape** — NEW, synthesises Romo 2014 + Bal 2026 (see
+  key-facts bullet below).
+- `benchmark_analytic.py` — §10.1 figure: sphere/spheroid/capsule vs exact (latitude scatter).
+- `convergence_study.py` — §10.2: error & spurious-deviatoric vs h (subdiv 3-6).
+- `linearity_test.py` — §10.3: σ ∝ Δp/t over 6 (Δp,t) combos.
+- `residual_test.py` — §10.4: per-vertex equilibrium-residual surface maps (vedo 3-panel).
+- `mesh_resolution_study.py` — §10.7: error vs `h·κ` (embryo band) + λ tradeoff U-curve.
 - `out/` — generated `.npy` / `.csv` / `.png` / `.npz` / `.vtp` results.
 
 ## Conventions
