@@ -168,14 +168,157 @@ def solve_membrane(mesh: vedo.Mesh, dp: float, t: float,
     d1 /= np.linalg.norm(d1, axis=1, keepdims=True) + 1e-15
     d2 /= np.linalg.norm(d2, axis=1, keepdims=True) + 1e-15
 
+    # Shear diagnostic: how far principal stress axes deviate from curvature axes.
+    # ~0% on axisymmetric surfaces; non-trivial on general meshes.
+    delta = np.abs(r) / (np.abs(p) + np.abs(q) + 1e-15)
+
     return dict(
         pts=pts, normals=n, e1=t1, e2=t2,
         kappa1=f["kappa1"], kappa2=f["kappa2"],
+        H=f["H"], K=f["K"],
         p=p, q=q, r=r,
+        delta=delta,
         sigma1=sigma1, sigma2=sigma2, N1=N1, N2=N2,
         d1=d1, d2=d2,
         resid=resid,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Post-processing: smoothing and saving
+# --------------------------------------------------------------------------- #
+
+def _one_ring_avg(mesh: vedo.Mesh) -> sp.csr_matrix:
+    """Row-normalised 1-ring adjacency (umbrella) matrix."""
+    adlist = mesh.compute_adjacency()
+    n = mesh.npoints
+    rows, cols, vals = [], [], []
+    for i in range(n):
+        nb = np.asarray(
+            mesh.find_adjacent_vertices(i, depth=1, adjacency_list=adlist), dtype=int
+        )
+        nb = nb[nb != i]
+        if len(nb) == 0:
+            rows.append(i); cols.append(i); vals.append(1.0)
+            continue
+        w = 1.0 / len(nb)
+        rows += [i] * len(nb); cols += list(nb); vals += [w] * len(nb)
+    return sp.csr_matrix((vals, (rows, cols)), shape=(n, n))
+
+
+def _laplacian_smooth(f: np.ndarray, A: sp.csr_matrix,
+                      iters: int = 12, alpha: float = 0.5) -> np.ndarray:
+    out = f.copy()
+    for _ in range(iters):
+        out = (1 - alpha) * out + alpha * (A @ out)
+    return out
+
+
+def smooth_results(res: dict, mesh: vedo.Mesh,
+                   iters: int = 12, alpha: float = 0.5) -> dict:
+    """Return a copy of *res* with Laplacian-smoothed stress/resultant fields added.
+
+    Added keys: sigma1_smooth, sigma2_smooth, N1_smooth, N2_smooth.
+    """
+    A = _one_ring_avg(mesh)
+    out = dict(res)
+    for key in ("sigma1", "sigma2", "N1", "N2"):
+        if key in res:
+            out[key + "_smooth"] = _laplacian_smooth(res[key], A,
+                                                     iters=iters, alpha=alpha)
+    return out
+
+
+def save_results(res: dict, path_prefix: str, mesh: vedo.Mesh,
+                 dp: float, t, lam: float = 0.05, depth: int = 3) -> None:
+    """Save GFDM results to ``<path_prefix>.npz`` and ``<path_prefix>.vtp``.
+
+    Parameters
+    ----------
+    res         : dict returned by solve_membrane (optionally extended by smooth_results)
+    path_prefix : e.g. "out/sphere_s4" (directory is created if needed)
+    mesh        : vedo.Mesh (needed for faces and VTP writing)
+    dp          : pressure jump (Pa)
+    t           : thickness — scalar for uniform, or 1-D array of shape (n,) for
+                  spatially varying.  Always stored as per-vertex array ``t_field``
+                  so future varying-thickness runs only need to change this field
+                  and re-divide N1/N2; no re-solve required.
+    lam, depth  : Tikhonov weight and neighbourhood depth (stored as metadata)
+
+    Notes on varying thickness
+    --------------------------
+    The GFDM solve is statically determinate: the resultants N1, N2 (force per
+    unit length) depend only on geometry and dp, NOT on t.  The stresses are
+    sigma = N / t, applied per-vertex when t varies.  Therefore:
+      • Always save N1, N2 alongside sigma1, sigma2.
+      • To rerun with a new thickness map, load the NPZ, replace t_field, and
+        recompute sigma = N / t_field — no re-solve needed.
+      • If the thickness variation is large (t/R not small everywhere) the
+        membrane assumption may break down; flag vertices where t > 0.1 * min(r1, r2).
+    """
+    parent = os.path.dirname(path_prefix)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+
+    n = len(res["pts"])
+    t_field = np.full(n, float(t)) if np.isscalar(t) else np.asarray(t, dtype=float)
+
+    # ---- NPZ ---------------------------------------------------------------- #
+    npz_data = dict(
+        # mesh
+        pts=res["pts"],
+        faces=np.asarray(mesh.cells),
+        # normals (surface normal used for both curvature calc and stress RHS)
+        normals=res["normals"],
+        # curvature frame
+        e1=res["e1"], e2=res["e2"],
+        kappa1=res["kappa1"], kappa2=res["kappa2"],
+        H=res["H"], K=res["K"],
+        # stress DOFs in principal curvature frame (raw, before smoothing)
+        # N = p*e1⊗e1 + q*e2⊗e2 + r*(e1⊗e2 + e2⊗e1)
+        p=res["p"], q=res["q"], r=res["r"],
+        # resultants N (force/length) — independent of t; use to recompute
+        # stresses with a different thickness map without re-solving
+        N1=res["N1"], N2=res["N2"],
+        # stresses (Pa) = N / t_field
+        sigma1=res["sigma1"], sigma2=res["sigma2"],
+        # principal stress directions in world R³ (line field: ±d1 equivalent)
+        d1=res["d1"], d2=res["d2"],
+        # diagnostics
+        delta=res["delta"],          # |r|/(|p|+|q|): stress-curvature axis misalignment
+        resid=np.array(res["resid"]),
+        # loading and solve parameters
+        dp=np.array(dp, dtype=float),
+        t_field=t_field,             # per-vertex thickness (Pa/m²); scalar → uniform
+        lam=np.array(lam, dtype=float),
+        depth=np.array(depth, dtype=int),
+    )
+    # smoothed fields (present only if smooth_results() was called first)
+    for key in ("sigma1_smooth", "sigma2_smooth", "N1_smooth", "N2_smooth"):
+        if key in res:
+            npz_data[key] = res[key]
+
+    np.savez_compressed(path_prefix + ".npz", **npz_data)
+    print(f"  Saved {path_prefix}.npz")
+
+    # ---- VTP (ParaView / vedo) ---------------------------------------------- #
+    mc = mesh.clone()
+    scalar_fields = [
+        "kappa1", "kappa2", "H", "K",
+        "p", "q", "r", "delta",
+        "N1", "N2", "sigma1", "sigma2",
+        "sigma1_smooth", "sigma2_smooth", "N1_smooth", "N2_smooth",
+    ]
+    for fld in scalar_fields:
+        if fld in res:
+            mc.pointdata[fld] = res[fld]
+    mc.pointdata["t_field"] = t_field
+    # vector fields (3-component per vertex)
+    for fld in ("normals", "e1", "e2", "d1", "d2"):
+        if fld in res:
+            mc.pointdata[fld] = res[fld]
+    mc.write(path_prefix + ".vtp")
+    print(f"  Saved {path_prefix}.vtp")
 
 
 # --------------------------------------------------------------------------- #
@@ -352,18 +495,27 @@ def main():
     ap.add_argument("--t",       type=float, default=0.05,  help="wall thickness")
     ap.add_argument("--lam",     type=float, default=0.05,  help="Tikhonov weight")
     ap.add_argument("--stretch", type=float, default=2.0,   help="spheroid long-axis scale")
-    ap.add_argument("--out",     default="out/membrane_stress_v2.png")
-    ap.add_argument("--show",    action="store_true")
+    ap.add_argument("--out",      default="out/membrane_stress_v2.png")
+    ap.add_argument("--save-dir", default="out",
+                    help="directory for .npz/.vtp outputs ('' to skip saving)")
+    ap.add_argument("--no-save",  action="store_true",
+                    help="skip saving .npz/.vtp files")
+    ap.add_argument("--show",     action="store_true")
     args = ap.parse_args()
 
-    R = args.radius
+    R    = args.radius
+    save = not args.no_save and args.save_dir
 
     # ---- sphere -------------------------------------------------------------- #
     print("\n" + "=" * 60)
     print(f"Sphere  R={R}  subdiv={args.subdiv}  depth={args.depth}")
     sphere = vedo.IcoSphere(r=R, subdivisions=args.subdiv)
     rs = solve_membrane(sphere, args.dp, args.t, depth=args.depth, lam=args.lam)
+    rs = smooth_results(rs, sphere)
     report("sphere", rs, args.dp, args.t, a=R, b=R)
+    if save:
+        save_results(rs, os.path.join(args.save_dir, f"sphere_s{args.subdiv}"),
+                     sphere, dp=args.dp, t=args.t, lam=args.lam, depth=args.depth)
 
     # ---- prolate spheroid ---------------------------------------------------- #
     print("\n" + "=" * 60)
@@ -371,7 +523,11 @@ def main():
     print(f"Spheroid  a={a_ax}  b={R}  subdiv={args.subdiv}  depth={args.depth}")
     ell = vedo.IcoSphere(r=R, subdivisions=args.subdiv).scale([args.stretch, 1.0, 1.0])
     re  = solve_membrane(ell, args.dp, args.t, depth=args.depth, lam=args.lam)
+    re  = smooth_results(re, ell)
     report(f"spheroid a={a_ax}", re, args.dp, args.t, a=a_ax, b=R)
+    if save:
+        save_results(re, os.path.join(args.save_dir, f"spheroid_s{args.subdiv}"),
+                     ell, dp=args.dp, t=args.t, lam=args.lam, depth=args.depth)
 
     # ---- capsule ------------------------------------------------------------- #
     print("\n" + "=" * 60)
@@ -381,12 +537,15 @@ def main():
     cap.rotate_y(90)   # long axis z → x, consistent with spheroid for default view
     print(f"  {cap.npoints} vertices, {cap.ncells} faces")
     rc  = solve_membrane(cap, args.dp, args.t, depth=args.depth, lam=args.lam)
+    rc  = smooth_results(rc, cap)
     print(f"  residual = {rc['resid']:.3e}")
-    # Analytic reference for cylinder body: sigma_hoop=dp*R/t, sigma_axial=dp*R/(2t)
     cyl_mask = np.abs(rc["pts"][:, 2]) < CAP_H * 0.8
     s1c = rc["sigma1"][cyl_mask]; s2c = rc["sigma2"][cyl_mask]
     print(f"  Cylinder body: sigma_max mean={s1c.mean():.1f}  analytic={args.dp*CAP_R/args.t:.1f}")
     print(f"                 sigma_min mean={s2c.mean():.1f}  analytic={args.dp*CAP_R/(2*args.t):.1f}")
+    if save:
+        save_results(rc, os.path.join(args.save_dir, f"capsule"),
+                     cap, dp=args.dp, t=args.t, lam=args.lam, depth=args.depth)
 
     # ---- 3-panel plot -------------------------------------------------------- #
     cases = [
