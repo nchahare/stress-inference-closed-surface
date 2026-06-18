@@ -119,12 +119,15 @@ genus-0 surface; unfixable by any algorithm).
 
 **LaTeX document:** `tension_inference.tex` / `.pdf` — standalone derivation (continuously
 updated). Current sections: surface parametrisation and fundamental forms, membrane stress
-resultant, balance of linear momentum (normal → Young-Laplace; tangential → in-plane
+resultant, the **role of thickness** (resultant vs stress, static determinacy, varying-`t`
+regimes), balance of linear momentum (normal → Young-Laplace; tangential → in-plane
 equilibrium), ambient-component GFDM trick, 2×2 analytic diagonalisation, static
-indeterminacy and null modes on closed surfaces, Tikhonov regularisation, principal
-curvature frame solve, principal stress directions (d₁, d₂, θ_s), and a proposed
-validation roadmap (§9: convergence, linearity, residual thresholds, shear diagnostic,
-smoothing sensitivity, FEM cross-check, direction-field biology check).
+indeterminacy and null modes (mesh-dependent pattern + Rician eigenvalue bias), Tikhonov
+regularisation (incl. **direct-vs-lsqr solver choice**), principal curvature frame solve,
+principal stress directions (d₁, d₂, θ_s), and a **validation suite (§9, mostly run)**:
+analytic benchmarks, mesh convergence, pressure/thickness linearity, equilibrium-residual
+maps, **mesh-resolution requirement (`h·κ`) + solve timing**, shear diagnostic, smoothing
+sensitivity, FEM cross-check, direction-field biology.
 
 ```powershell
 # per-vertex principal curvature frame: kappa1, kappa2, e1, e2 (world R3), n
@@ -220,9 +223,50 @@ the stress principal axes tilt away from the curvature axes to satisfy global eq
 
 ```powershell
 # solve in principal curvature frame; sphere + spheroid + capsule -> out/membrane_stress_v2.png
-& $py membrane_stress_fd_v2.py                   # flags: --subdiv --depth --dp --t --lam --show
+# ALSO saves per-vertex results to out/{sphere_s4,spheroid_s4,capsule}.{npz,vtp}
+& $py membrane_stress_fd_v2.py                   # flags: --subdiv --depth --dp --t --lam --save-dir --no-save --show
 & $py membrane_stress_fd_v2.py --show            # opens interactive 3-panel vedo window
 ```
+
+**Saved results.** `solve_membrane` returns (and `save_results` writes to NPZ + VTP) every
+per-vertex field for later analysis: geometry (`pts`, `faces`, `normals`), curvature
+(`kappa1`, `kappa2`, `H`, `K`, `e1`, `e2`), stress DOFs (`p`, `q`, `r`), **resultants**
+(`N1`, `N2`) and **stresses** (`sigma1`, `sigma2`) plus their Laplacian-smoothed versions,
+principal stress **directions** (`d1`, `d2`), diagnostics (`delta` shear, `resid_pv`
+per-vertex residual), and the loading/solve metadata (`dp`, `t_field`, `lam`, `depth`).
+Because the membrane is statically determinate, `N1`/`N2` are independent of `t` — a new
+thickness map is applied by re-dividing `σ = N/t_field` with no re-solve. `t_field` is always
+stored per-vertex so varying-thickness cases need no special handling.
+
+### 9. Validation suite (§9 of `tension_inference`)
+
+Each script loads/produces analytic-case results and writes a figure into `out/`.
+
+```powershell
+# 9.1 analytic benchmarks: sphere/spheroid/capsule vs exact, latitude scatter -> out/benchmark_analytic.png
+& $py benchmark_analytic.py        # reads saved out/{sphere_s4,spheroid_s4,capsule}.npz
+
+# 9.2 convergence: error & spurious-deviatoric vs mesh spacing h (subdiv 3-6) -> out/convergence.png
+& $py convergence_study.py
+
+# 9.3 linearity: sigma ∝ Δp/t across 6 (Δp,t) combos, two routes overlap -> out/linearity_test.png
+& $py linearity_test.py
+
+# 9.4 equilibrium residual: per-vertex residual map on each surface -> out/residual_map.png
+& $py residual_test.py             # flags: --subdiv --show
+
+# 9.7 mesh-resolution & λ tradeoff: error vs h·κ with embryo band + λ U-curve -> out/mesh_resolution_study.png
+& $py mesh_resolution_study.py
+```
+
+Key findings (smoothed, subdiv-4, Δp=20, t=0.05): sphere mean-stress **1.0%**, spheroid
+equatorial σ_max/σ_min **1.5% / 1.9%**, capsule cylinder hoop/axial **5.0% / 2.0%**.
+Linearity: `σ/(Δp/t)` constant to 4 decimals. **λ=0.05 confirmed near-optimal** (U-shaped
+error). **Resolution**: error is governed by the dimensionless `h·κ`; the HH20 embryo
+(`n=3766`) sits at `h·κ≈0.17` median / `0.44` p90 — coarser than our coarsest analytic
+test, so high-curvature folds need curvature-**adaptive** refinement (a uniform `h·κ=0.05`
+target is ~4e4 verts). **Timing** (sphere, depth-3): sd3 0.7s · sd4 7.6s · sd5 **267s**
+(direct) · sd6 532s (lsqr) — the direct normal-equation solve scales ~×35 per ×4 DOFs.
 
 ### 6. Final-results simulations (method comparison: Local vs cMSM vs FEM)
 
@@ -290,6 +334,8 @@ Last updated: **2026-06-17 (UTC-04:00)**
 - [x] `show_capsule.py` — capsule mesh builder (`make_capsule`) + curvature-frame validation + sign-consistency viewer; 3 region validation (cylinder κ₁=1/R κ₂=0 exact, caps κ₁=κ₂=1/R within 4–10%); 3/2522 (0.1%) inconsistent after BFS — _2026-06-17_
 - [x] `membrane_stress_fd_v2.py` — GFDM stress solve in the **principal curvature frame** (e₁,e₂); same σ₁,σ₂ as v1 (frame-independent eigenvalues); adds **d₁,d₂** (principal stress directions, world R³) via `θ_s = ½arctan2(2r, p−q)` and `r` shear diagnostic; `plot_stress_frame` renders 3-panel vedo plot (sphere + spheroid + capsule, σ₁ colour + **symmetric line segments** for d₁; stress is a line field so segments not arrows; umbilic regions suppressed by discriminant filter; ~150 segments per panel via stride subsampling) → `out/membrane_stress_v2.png` — _2026-06-17_
 - [x] **Final-results matrix started** — `local_stress.py` (M1), `final_sims.py` (sphere+ellipsoid M1+M2), `final_real.py` (HH17/HH20 M1+M2), `view_final.py` (interactive, grouped colour limits), `box_compare.py` + `real_box_compare.py` (box plots); ran Sims 1,2,7,8 + the two real meshes at **dp=20** — _2026-06-16_
+- [x] **Result saving in `membrane_stress_fd_v2.py`** — `save_results` writes per-vertex NPZ + VTP (curvature, stress DOFs, resultants `N1`/`N2`, σ₁/σ₂ raw + smoothed, directions d₁/d₂, `delta`, `resid_pv`, `t_field`); `smooth_results` adds Laplacian-smoothed fields; resultants stored separately from σ so varying-thickness needs no re-solve — _2026-06-17_
+- [x] **Validation suite (§9 of `tension_inference`)** — `benchmark_analytic.py` (9.1: sphere/spheroid/capsule vs exact, ≤5% smoothed), `convergence_study.py` (9.2: ~h¹·¹⁻¹·³ to error floor), `linearity_test.py` (9.3: σ∝Δp/t to 4 decimals), `residual_test.py` (9.4: per-vertex residual maps — null-mode fingerprint on sphere, junction spikes on capsule), `mesh_resolution_study.py` (9.7: error vs `h·κ` + embryo band, λ U-curve, solve timing) — _2026-06-17_
 
 ### Final-results matrix (2 geom × 2 thickness × 3 methods = 12)
 
@@ -310,6 +356,12 @@ M1+M2 on **HH17 (decimated to HH20's 3766 pts) + HH20** for the real-mesh compar
 - Mean stress `(σ₁+σ₂)/2` recovered to **a few %** (median); sphere → 10.0 (target ΔpR/2t=10).
 - Spheroid **anisotropy reproduced**: σ_max≈15.7 (≈analytic), σ_min≈9.2; equator ratio → **1.75**.
 - Equilibrium residual `‖LS−b‖/‖b‖ ~ 10⁻³` on analytic meshes; **~0.20 on real irregular meshes** (expected).
+- **Validation suite (§9, smoothed, subdiv-4, Δp=20, t=0.05):** benchmark errors — sphere mean
+  **1.0%**, spheroid σ_max/σ_min **1.5%/1.9%**, capsule cylinder hoop/axial **5.0%/2.0%**;
+  linearity `σ/(Δp/t)` constant to 4 decimals; **λ=0.05 near-optimal** (U-shaped error);
+  residual maps show the imbalance is structural (icosahedral fingerprint, capsule-junction spikes),
+  not physical. **Mesh resolution** governed by `h·κ`; **HH20 embryo coarser than subdiv-3**
+  (`h·κ≈0.17` median, `0.44` p90) → needs adaptive refinement at high-curvature folds.
 - **Two fixes for the lines, with a tradeoff:**
   - **Laplacian smoothing** (`stress_smoothing_compare.py`) — cuts sphere σ_max std 0.69→0.15 (~4.5×); on real meshes smoothing cuts std ~2.5×. **Currently the best practical method.**
   - **Beltrami stress function** (`membrane_stress_beltrami.py`) — removes lines structurally; under-predicts spheroid anisotropy ~40% with current operators.
@@ -367,8 +419,13 @@ M1+M2 on **HH17 (decimated to HH20's 3766 pts) + HH20** for the real-mesh compar
 - `box_compare.py` — box plot Local vs cMSM vs analytical (sphere+ellipsoid) → `out/final/box_compare.png`
 - `real_box_compare.py` — box plot HH17 vs HH20 (Local & cMSM) → `out/final/real_box_compare.png`
 - `surface_curvature_frame.py` — principal curvature frame (κ₁,κ₂, **e₁**,**e₂**,**n**): shape-operator diagonalisation + BFS sign propagation for global consistency
-- `membrane_stress_fd_v2.py` — GFDM solve in the principal curvature frame (e₁,e₂); adds **d₁**,**d₂** (principal stress directions, world R³) and `r` shear diagnostic; `plot_stress_frame` renders 3-panel plot with σ₁ colour map and **symmetric line segments** for d₁ (line field, not arrows; umbilic-suppressed + stride-subsampled to ~150 glyphs)
-- `tension_inference.tex` / `.pdf` — standalone derivation of surface geometry, membrane balance equations (normal + tangential), GFDM, curvature-frame extraction, and principal stress directions
+- `membrane_stress_fd_v2.py` — GFDM solve in the principal curvature frame (e₁,e₂); adds **d₁**,**d₂** (principal stress directions, world R³) and `r` shear diagnostic; `plot_stress_frame` renders 3-panel plot with σ₁ colour map and **symmetric line segments** for d₁ (line field, not arrows; umbilic-suppressed + stride-subsampled to ~150 glyphs); **`save_results`/`smooth_results`** write per-vertex NPZ + VTP (resultants `N1`/`N2` + smoothed σ + directions + `resid_pv` + `t_field`)
+- `benchmark_analytic.py` — §9.1 analytic benchmark figure (sphere/spheroid/capsule vs exact, latitude scatter) → `out/benchmark_analytic.png`
+- `convergence_study.py` — §9.2 error & spurious-deviatoric vs mesh spacing h (IcoSphere subdiv 3-6) → `out/convergence.png`
+- `linearity_test.py` — §9.3 σ ∝ Δp/t check over 6 (Δp,t) combos → `out/linearity_test.png`
+- `residual_test.py` — §9.4 per-vertex equilibrium-residual surface maps (sphere/spheroid/capsule) → `out/residual_map.png`
+- `mesh_resolution_study.py` — §9.7 error vs dimensionless `h·κ` with embryo band + λ tradeoff U-curve → `out/mesh_resolution_study.png`
+- `tension_inference.tex` / `.pdf` — standalone derivation: surface geometry, membrane balance (normal + tangential), thickness role, GFDM (+ solver choice), curvature-frame extraction, principal stress directions, and the §9 validation suite (benchmarks, convergence, linearity, residual maps, resolution/timing)
 - `show_e2_spheroid.py` — sign-consistency visualiser for **e₂** on spheroid (cyan=consistent, red=flipped; 2 residual singularities at umbilic poles)
 - `show_e2_sphere.py` — sign-consistency visualiser on sphere (totally umbilic worst case; 314 inconsistent after BFS — hairy ball theorem)
 - `show_capsule.py` — capsule mesh builder (`make_capsule`) + three-region curvature validation + sign-consistency viewer (mesh coloured by discriminant d=|κ₁−κ₂|/2)

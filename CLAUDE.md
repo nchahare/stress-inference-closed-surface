@@ -169,9 +169,11 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
 - `surface_fd.py` — GFDM surface-derivative operators + self-test.
 - `membrane_stress_fd.py` — direct GFDM membrane-stress solve (σ₁, σ₂); arbitrary fit frame.
 - `membrane_stress_fd_v2.py` — same solve in the **principal curvature frame** (e1, e2 from
-  `compute_curvature_frame`); adds `d1`, `d2` (principal stress directions, world R³) and `r`
-  shear diagnostic; includes `make_capsule` and `plot_stress_frame` (3-panel vedo plot:
-  sphere + spheroid + capsule, mesh coloured by σ₁, white d1 arrows).
+  `compute_curvature_frame`); adds `d1`, `d2` (principal stress directions, world R³), `r`
+  shear diagnostic, and per-vertex `resid_pv`; includes `make_capsule` and `plot_stress_frame`
+  (3-panel vedo plot: sphere + spheroid + capsule, mesh coloured by σ₁, white d1 segments).
+  **`save_results`/`smooth_results`** write per-vertex NPZ + VTP (resultants `N1`/`N2` stored
+  separately from σ so varying-`t` needs no re-solve; `t_field` always per-vertex).
 - `stress_smoothing_compare.py` — Laplacian smoothing of σ; raw vs smoothed vs mean (2×3 grid).
 - `membrane_stress_beltrami.py` — Beltrami/Airy stress-function solve (single scalar Φ).
 - `reg_compare.py` — cMSM-style (grad-trace + curl) regularization vs our Laplacian smoothing,
@@ -195,12 +197,19 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
 - `stress_estimation.tex` / `.pdf` — equations, method, results (compile with `pdflatex` TWICE
   for refs; MiKTeX present). Embeds figures from `out/`.
 - `tension_inference.tex` / `.pdf` — standalone mathematical derivation (continuously updated).
-  Covers: surface geometry, membrane stress model, balance of linear momentum (GFDM trick),
-  principal curvature frame solve (§4.3), static indeterminacy + null modes (§4.5), Tikhonov
-  regularisation (§4.6), principal stress directions d₁/d₂ extraction (§6), proposed
-  validation roadmap §9 (convergence, linearity, residual thresholds, shear diagnostic,
-  FEM cross-check, direction-field biology).
-- `out/` — generated `.npy` / `.csv` / `.png` results.
+  Covers: surface geometry, membrane stress model + thickness role (§2.3), balance of linear
+  momentum (GFDM trick), principal curvature frame solve (§4.3), static indeterminacy + null
+  modes / mesh-dependent pattern + Rician bias (§4.5), Tikhonov regularisation + direct-vs-lsqr
+  solver (§4.6), principal stress directions d₁/d₂ extraction (§6), and the **§9 validation
+  suite (mostly run with figures)**: §9.1 benchmarks, §9.2 convergence, §9.3 linearity, §9.4
+  residual maps, §9.7 mesh-resolution (`h·κ`) + timing; §9.5/9.6/9.8 (shear, smoothing, FEM)
+  still proposed.
+- `benchmark_analytic.py` — §9.1 figure: sphere/spheroid/capsule vs exact (latitude scatter).
+- `convergence_study.py` — §9.2: error & spurious-deviatoric vs h (subdiv 3-6).
+- `linearity_test.py` — §9.3: σ ∝ Δp/t over 6 (Δp,t) combos.
+- `residual_test.py` — §9.4: per-vertex equilibrium-residual surface maps (vedo 3-panel).
+- `mesh_resolution_study.py` — §9.7: error vs `h·κ` (embryo band) + λ tradeoff U-curve.
+- `out/` — generated `.npy` / `.csv` / `.png` / `.npz` / `.vtp` results.
 
 ## Conventions
 - Keep code self-contained; do **not** install the full spatchcocking package (drags in
