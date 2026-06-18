@@ -431,14 +431,66 @@ by any amount of $\vv{s}_{\rm null}$ without violating equilibrium:
 \[
   L(\vv{s}^*+\alpha\,\vv{s}_{\rm null}) = L\vv{s}^* + \alpha\,L\vv{s}_{\rm null} = \vv{b}.
 \]
-This gives infinitely many solutions.  The null modes appear as
-\emph{streaky artefacts} aligned with the icosahedral mesh structure
-(``hourglass modes''); they are low-wave-number and cannot be killed by
-a high-pass regulariser without distorting the physical signal.
+This gives infinitely many solutions.
+
+\paragraph{The null-mode pattern is mesh-dependent.}
+The \emph{existence} of null modes is a topological fact: any closed
+genus-0 surface has self-equilibrating stress states regardless of how
+it is triangulated.  However, the \emph{spatial pattern} of those modes
+is set by the mesh structure.  On an IcoSphere the null modes align with
+the icosahedral triangulation — its 5-fold and 6-fold symmetry axes —
+producing the characteristic streaks visible in the raw GFDM output.
+On a UV sphere they would align with meridians and parallels; on a real
+biological mesh they follow the local edge directions.  In short, the
+streaks are a fingerprint of the triangulation, not of the biology.
+
+A practical consequence: finer meshes push the null-mode pattern to
+higher spatial frequency, which is why Laplacian post-smoothing is more
+effective at subdiv-5 than subdiv-4, and why the IcoSphere is preferred
+over a UV sphere (the IcoSphere's uniform triangulation avoids the
+pole-concentrated artefacts of the UV grid).
+
+\paragraph{Effect on the principal stresses: a one-sided bias.}
+Because the null modes are self-equilibrating, their net contribution to
+the mean stress $(\sigma_1+\sigma_2)/2$ is zero: any spurious tension at
+one vertex is cancelled by compression at a neighbouring vertex.  The
+mean stress is therefore an unbiased estimator of the true isotropic
+load even before smoothing.
+
+The maximum principal stress $\sigma_1$, however, is systematically
+biased \emph{upward}.  Each null mode adds a localised deviatoric
+perturbation $\delta_i$ at vertex $i$, turning the principal stresses
+into $\sigma_{\rm ref}\pm|\delta_i|$.  Taking the larger eigenvalue
+always picks up the positive side:
+\begin{equation}
+  \langle\sigma_1\rangle
+    = \sigma_{\rm ref} + \langle|\delta|\rangle > \sigma_{\rm ref},
+  \qquad
+  \langle\sigma_2\rangle
+    = \sigma_{\rm ref} - \langle|\delta|\rangle < \sigma_{\rm ref},
+  \qquad
+  \langle\tfrac{\sigma_1+\sigma_2}{2}\rangle = \sigma_{\rm ref}.
+  \label{eq:rician-bias}
+\end{equation}
+This is the same mechanism as \emph{Rician bias} in MRI: taking a
+magnitude (always non-negative) from a noisy signal gives a mean that
+is biased upward even when the underlying signal is symmetric.  On the
+IcoSphere subdiv-4 the bias amounts to ${\sim}6\%$ of the true
+$\sigma_1$ in the raw solve; Laplacian post-smoothing reduces
+$\langle|\delta|\rangle$ by ${\sim}8\times$, bringing the bias down to
+${\sim}1\%$ (Table~\ref{tab:benchmark}).
+
+Because the null-mode amplitude scales with $\Delta p$ (the modes are
+driven by the right-hand side $\vv{b}=-\Delta p\,\nn$), the relative
+bias $\langle|\delta|\rangle/\sigma_{\rm ref}$ is a \emph{constant} of the
+mesh and solve parameters — independent of $\Delta p$ or $t$.  This is
+why the linearity test (§\ref{sec:validation-checks}) shows a fixed ratio
+$\sigma_1/(\Delta p/t)=0.5316$ rather than the analytic $0.500$: the
+6\% offset is a systematic null-mode bias, not a linearity error.
 
 \paragraph{Contrast with open surfaces.}  On an open dome (as in the
-reference cMSM method), the boundary conditions pin the displacements
-and anchor the stress, removing the null space.  Closed surfaces have no
+reference cMSM method), the boundary conditions pin the stress at the
+boundary, removing the null space entirely.  Closed surfaces have no
 such anchor, making the problem intrinsically more difficult.
 
 %% -------------------------------------------------------------------------
