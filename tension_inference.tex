@@ -148,6 +148,81 @@ corresponding \emph{principal membrane stresses} are
   \label{eq:sigma}
 \end{equation}
 
+%% -------------------------------------------------------------------------
+\subsection{The role of thickness: resultant versus stress}
+\label{sec:thickness}
+
+Equations~\eqref{eq:resultant}--\eqref{eq:sigma} split the problem into two
+stages whose dependence on the thickness $t$ is very different, and it is worth
+stating precisely where $t$ does and does not enter.
+
+\paragraph{The solve never sees the thickness.}
+The equilibrium equation~\eqref{eq:equil}, and hence the entire linear system we
+assemble in \S\ref{sec:gfdm}, is written purely in terms of the \emph{resultant}
+$\Nb$ (force per unit length) and contains no $t$.  Geometry — the curvatures
+$\kappa_1,\kappa_2$ and the surface differential operators — together with the
+load $\Delta p$ fix $\Nb$ completely.  Thickness enters only afterwards, through
+the pointwise division $\sigma_i = N_{ii}/t$ in equation~\eqref{eq:sigma}.
+
+\paragraph{Why this is exact, not an approximation: static determinacy.}
+The membrane problem on a pressurised closed surface is \emph{statically
+determinate}.  At each vertex there are three equilibrium equations — one normal
+(\S\ref{sec:normal}) and two tangential (\S\ref{sec:tangential}) — for the three
+stress DOFs $(N_{11},N_{22},N_{12})$.  No constitutive (stress--strain) relation
+is required to close the system, so the resultant field $\Nb$ is independent of
+both the material model and the thickness distribution.  The classical sphere
+result $\sigma=\Delta p\,R/2t$ is the canonical instance: it follows from force
+balance alone, with $t$ appearing only as a final divisor.  This is exactly the
+constitutive-free property that the cMSM force-inference method relies upon.
+
+\begin{quote}\small
+\textbf{Remark (two distinct meanings of ``determinacy'').}  The
+\emph{constitutive} determinacy used here — $\Nb$ is fixed without a material
+law — should not be confused with the \emph{static indeterminacy / null modes}
+of \S\ref{sec:null-modes}.  The former holds pointwise from the differential
+equilibrium equations; the latter is a global property of a \emph{closed}
+surface, where the discrete operator $L$ admits self-equilibrating null modes
+and the numerical problem becomes rank-deficient.  Thickness plays no role in
+either.
+\end{quote}
+
+\paragraph{Consequence for spatially varying thickness.}
+Because $\Nb$ does not depend on $t$, a spatially varying field
+$t=t(\vv{x})$ requires \emph{no} re-solve.  One stores the resultants
+$N_1,N_2$ from a single solve and recovers the stresses by the pointwise
+division
+\begin{equation}
+  \sigma_i(\vv{x}) = \frac{N_i}{t(\vv{x})}, \qquad i=1,2.
+  \label{eq:sigma-varying}
+\end{equation}
+In practice this means: (i) the resultants $N_1,N_2$ are the durable output of
+the inverse solve and are stored alongside $\sigma_1,\sigma_2$; (ii) a new
+thickness map only changes the divisor in~\eqref{eq:sigma-varying}; and
+(iii) the thin-wall assumption must be re-checked pointwise, flagging vertices
+where $t(\vv{x})\gtrsim 0.1\,\min(R_1,R_2)$.
+
+\paragraph{When thickness does more than divide.}
+The pointwise scaling is special to the \emph{inverse} membrane problem on a
+prescribed geometry.  Thickness couples non-trivially in other regimes:
+\begin{itemize}[nosep]
+  \item \textbf{Forward elastic shells.}  If one predicts the deformed shape
+        from a reference configuration and a material law, the resultant becomes
+        $\Nb = t\,\mathbb{C}{:}\,\bm{\varepsilon}$, so $t$ enters the
+        constitutive relation; the membrane stiffness scales as $t$ while the
+        bending rigidity scales as $t^3$, and thickness \emph{gradients} add
+        terms to the governing operator.  The dorsoventral-varying-thickness
+        study (our M3 neo-Hookean FEM cross-check) lives in this regime — there
+        $t$ genuinely changes the equilibrium shape and curvatures, not just the
+        stress amplitude.
+  \item \textbf{Fluid membranes (soap films, lipid bilayers).}  The tension is
+        set thermodynamically (surface free energy), is uniform and isotropic
+        because the fluid flows in-plane to equalise it, and is independent of
+        the molecular film thickness.  Spatial tension variation, when present,
+        is driven by a surfactant-concentration / Marangoni transport equation
+        rather than by thickness; the nanometric film thickness affects optics
+        and drainage, not the mechanical force balance.
+\end{itemize}
+
 %% =========================================================================
 \section{Balance of linear momentum}
 \label{sec:balance}
