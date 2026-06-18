@@ -1096,6 +1096,79 @@ If the location of the stress maximum shifts with smoothing, the underlying
 signal may be too weak relative to the null-mode noise.
 
 %% -------------------------------------------------------------------------
+\subsection{Regularisation tradeoff and mesh-resolution requirement for embryo data}
+\label{sec:resolution-requirement}
+
+Two coupled questions decide whether a stress estimate on a real embryo
+mesh is trustworthy: \emph{what regularisation weight $\lambda$ to use},
+and \emph{how fine the mesh must be}.  Both were quantified on the analytic
+geometries, where the exact stress is known (Figure~\ref{fig:resolution}).
+
+\paragraph{The $\lambda$ tradeoff has a genuine optimum.}
+The residual $\varepsilon$ alone is a misleading objective: at $\lambda=0$
+on the sphere it collapses to $\varepsilon\approx10^{-7}$ while the stress
+error explodes to ${\sim}1900\%$ — the unregularised solve is entirely
+null modes (Figure~\ref{fig:resolution}A).  Sweeping $\lambda$ on the
+spheroid (which, unlike the sphere, carries real hoop/meridional
+anisotropy) reveals a U-shaped error curve: too small $\lambda$ leaves
+null-mode contamination ($\sigma_{\max}$ error $6.6\%$ at $\lambda=0.005$),
+too large $\lambda$ over-smooths the genuine anisotropy ($\sigma_{\max}$
+error $5.8\%$ at $\lambda=0.2$).  The minimum sits at
+$\lambda\approx0.05$--$0.1$ ($\sigma_{\max}$ error $0.9\%$,
+$\sigma_{\min}$ error $3.4\%$), confirming the standing default
+$\lambda=0.05$ as near-optimal.  The residual at that optimum is
+$\varepsilon\approx2\times10^{-2}$ — i.e.\ the ``correct'' residual is
+\emph{not} the smallest achievable one.
+
+\paragraph{Resolution measured in $h\kappa$.}
+The relevant resolution variable is the dimensionless product
+$h\kappa$ (mesh spacing $\times$ local curvature), equivalently the number
+of elements per radius of curvature $1/(h\kappa)$.
+Figure~\ref{fig:resolution}B plots the smoothed stress error against
+$h\kappa$ for the sphere (worst case: isotropic, so the error is pure
+null-mode bias) and the spheroid (anisotropic, more embryo-like).  The
+sphere needs $h\kappa\lesssim0.05$ (${\sim}20$ elements per curvature
+radius) to reach ${\sim}3\%$ error; the spheroid is more forgiving,
+already $<4\%$ at $h\kappa\approx0.18$.
+
+\paragraph{Where the HH20 embryo mesh sits.}
+The decimated HH20 mesh ($n=3766$) has median $h\kappa\approx0.17$ and
+$p_{90}\approx0.44$ — \emph{coarser} than our coarsest analytic test
+(sphere subdiv-3, $h\kappa=0.14$).  In high-curvature, locally
+isotropic regions (closing neural folds) this implies a worst-case error
+$\gtrsim10\%$; in the smoother tube-like body it is closer to the
+spheroid's few-percent.  To bring the worst regions to $h\kappa\approx0.05$
+by \emph{uniform} refinement would require $n\!\sim\!(0.17/0.05)^2\!\times\!3766
+\approx 4\times10^{4}$ vertices (and ${\sim}3\times10^{5}$ to fix the
+$p_{90}$ tail) — impractical uniformly.  The practical recommendations are:
+\begin{itemize}[nosep]
+  \item Use \textbf{curvature-adaptive refinement}: add resolution only
+        where $h\kappa$ is large (the folds), not uniformly.
+  \item Keep $\lambda=0.05$ and the 12-iteration Laplacian post-smoothing.
+  \item Export a per-vertex $h\kappa$ \emph{resolution-quality map} with the
+        stress, and flag vertices with $h\kappa\gtrsim0.1$ as
+        lower-confidence — they are below ${\sim}10$ elements per curvature
+        radius, where the GFDM quadratic fit degrades.
+\end{itemize}
+
+\begin{figure}[ht]\centering
+  \includegraphics[width=\textwidth]{out/mesh_resolution_study.png}
+  \caption{\textbf{(A)} $\lambda$ tradeoff on the spheroid (subdiv-4):
+  $\sigma_{\max}$ error (blue) is minimised near $\lambda=0.05$; smaller
+  $\lambda$ leaves null-mode error, larger $\lambda$ over-smooths the
+  anisotropy; the residual $\varepsilon$ (green) rises monotonically, so a
+  small $\varepsilon$ does not imply an accurate solution (the $\lambda=0$
+  sphere point has $\varepsilon\approx0$ yet ${\sim}1900\%$ error).
+  \textbf{(B)} Relative stress error vs the dimensionless resolution
+  $h\kappa$ for sphere (blue) and spheroid (green); finer meshes to the
+  right.  The orange band marks the HH20 embryo mesh
+  ($h\kappa=0.17$ median to $0.44$ at $p_{90}$, $n=3766$), which lies at
+  or beyond the coarse end of the analytic tests — quantifying how much
+  refinement the embryo data needs for a target accuracy.}
+  \label{fig:resolution}
+\end{figure}
+
+%% -------------------------------------------------------------------------
 \subsection{FEM cross-check (M3)}
 
 Inflate the same sphere and prolate spheroid geometries with a
