@@ -32,6 +32,184 @@
 \bigskip
 
 %% =========================================================================
+\section{Elastostatics of a pressurised shape: problem setting and the
+landscape of methods}
+\label{sec:elastostatics}
+
+Before the geometric and numerical machinery of the later sections, it is worth
+placing the problem in the broader context of elastostatics: \emph{given a
+hollow, pressurised shape, how does one compute the tension carried by its
+wall, and why is the method used here (equilibrium-based inference on the
+observed surface) the natural choice?}  This section answers that at the level
+of the governing physics; the precise equations and their discretisation follow
+in Sections~\ref{sec:geometry}--\ref{sec:gfdm}.
+
+%% -------------------------------------------------------------------------
+\subsection{What problem class this is}
+
+A hollow pressurised shape is a \emph{thin-walled shell under internal
+pressure}.  The quantity of interest — the ``tension'' — is the in-plane
+\emph{stress resultant} $\Nb$: the force per unit length carried within the
+wall, obtained by integrating the Cauchy stress $\bm\sigma$ through the wall
+thickness $t$,
+\begin{equation}
+  \Nb = \int_{-t/2}^{+t/2}\bm\sigma\,ds \;\approx\; \bm\sigma\,t
+  \quad(\text{thin wall}),
+  \label{eq:el-resultant}
+\end{equation}
+so that $\Nb$ has units of force/length (N/m) and the principal stresses are
+recovered by $\sigma_i=N_i/t$.  This is exactly the object defined in
+\S\ref{sec:model}.
+
+The first modelling fork is \emph{membrane} versus \emph{shell} behaviour:
+\begin{itemize}[nosep]
+  \item A \textbf{membrane} carries only in-plane resultants $(N_{11},N_{22},
+        N_{12})$ — no bending moments.  Valid when the wall is thin and away
+        from boundary layers, sharp features, or thickness discontinuities.
+  \item A \textbf{shell} additionally carries bending moments and transverse
+        shear.  These matter in thin boundary layers of width $\sim\!\sqrt{Rt}$
+        near clamped edges, point loads, or rapid curvature changes.
+\end{itemize}
+For a smoothly curved, thin, pressurised closed surface the membrane idealisation
+captures essentially all of the load, and is the regime adopted throughout these
+notes (assumptions stated in \S\ref{sec:model}).
+
+%% -------------------------------------------------------------------------
+\subsection{The governing equation and its two projections}
+
+Membrane equilibrium is a single vector PDE on the surface,
+$\divs\Nb+\Delta p\,\nn=\vv0$ (derived in \S\ref{sec:balance}).  Its power is
+that it separates by geometry into two physically distinct pieces:
+\begin{itemize}[nosep]
+  \item the \textbf{normal projection} gives the Young--Laplace law
+        $N_{11}\kone+N_{22}\ktwo=\Delta p$ (\S\ref{sec:normal}); for a sphere
+        this is the familiar $2N/R=\Delta p\Rightarrow N=\Delta p R/2$;
+  \item the \textbf{tangential projection} gives in-plane equilibrium,
+        $\divs\Nb|_{\rm tangent}=\vv0$ (\S\ref{sec:tangential}) — trivial for an
+        isotropic field on a sphere, but the constraint that \emph{forces} the
+        hoop/meridional anisotropy on a spheroid.
+\end{itemize}
+
+%% -------------------------------------------------------------------------
+\subsection{Static determinacy: why tension is geometric, not material}
+\label{sec:el-determinacy}
+
+The reason the tension can be computed \emph{without knowing the material} is
+that the membrane problem is \emph{statically determinate}.  Counting per
+surface point: the symmetric resultant tensor $\Nb$ has three independent
+components, and equilibrium supplies three scalar equations (one normal, two
+tangential).  Three equations, three unknowns — the resultant field is fixed by
+geometry and pressure alone.  No stress--strain relation, no Young's modulus or
+Poisson ratio, no reference (unstressed) configuration, and no strain measure
+enter.  This is not an approximation but a structural property of membrane
+equilibrium, and it is the entire basis of stress \emph{inference} (cMSM and the
+present method); see also the thickness discussion in \S\ref{sec:thickness}.
+
+The contrast makes the point sharp: a \emph{bending} shell carries six stress
+quantities (three resultants $+$ three moments) but still only three equilibrium
+equations, so it is statically \emph{indeterminate} and one is forced to bring in
+kinematics and a constitutive law.  The moment bending matters, material matters.
+
+Three caveats temper the determinacy — each is treated in detail later:
+\begin{enumerate}[label=(\roman*),nosep]
+  \item \textbf{No boundary $\Rightarrow$ self-equilibrating modes.}  A closed
+        surface has no edge to anchor the solution, so the homogeneous problem
+        $\divs\Nb=\vv0$ admits non-trivial states.  On a genus-0 surface there is
+        no smooth divergence-free traceless tensor field, so on the sphere
+        $\sigma_1=\sigma_2$ \emph{exactly} and any anisotropy is discretisation
+        error (the null modes of \S\ref{sec:null-modes}).
+  \item \textbf{Determinacy is geometry-dependent.}  The membrane PDE is elliptic
+        where the Gaussian curvature $K>0$ (convex, well posed) but hyperbolic
+        where $K<0$ (saddle regions), where characteristics appear and the local
+        problem can be ill posed.  Negative-curvature embryo folds are exactly
+        where inference becomes delicate
+        (\S\ref{sec:resolution-requirement}).
+  \item \textbf{Thickness is only a divisor.}  Because $\Nb$ is fixed by
+        equilibrium, $\sigma=\Nb/t$ — thickness rescales the stress but cannot
+        change the resultant.  This is why a spatially varying $t(\vv x)$ needs no
+        re-solve, and why the uniform-vs-varying-thickness science lives in the
+        forward FEM rather than in the inference (\S\ref{sec:thickness}).
+\end{enumerate}
+
+%% -------------------------------------------------------------------------
+\subsection{How people actually compute tension: four families}
+\label{sec:el-methods}
+
+\paragraph{(a) Analytic membrane theory (axisymmetric).}
+For a body of revolution under axisymmetric loading the equations collapse to
+closed form.  Two relations do everything: the Laplace law
+$N_\phi/r_1+N_\theta/r_2=\Delta p$ and the axial cap balance
+$N_\phi=\Delta p\,r_2/2$.  These yield the sphere, cylinder, spheroid and torus
+exactly.  This is the ``Local'' method (M1) of the results matrix.  Classic
+references: Timoshenko \& Woinowsky-Krieger, \emph{Theory of Plates and Shells};
+Fl\"ugge, \emph{Stresses in Shells}; Calladine, \emph{Theory of Shell
+Structures}.  Limited to revolutions with symmetric loading.
+
+\paragraph{(b) Pressure-vessel formulae.}
+Engineering specialisations of (a): hoop stress $\sigma=pr/t$ and longitudinal
+$pr/2t$ for a cylinder, $pr/2t$ for a sphere.  Same physics, lookup-table form.
+
+\paragraph{(c) Forward elasticity FEM (the general-shape workhorse).}
+Discretise the wall (continuum or shell elements), supply a constitutive law
+\emph{and} a reference configuration, apply the pressure, solve the (generally
+nonlinear) boundary-value problem for the displacement, then recover the stress.
+For soft tissue this means finite-strain hyperelasticity (neo-Hookean, Ogden)
+with large-deformation kinematics.  This is the M3 cross-check.  Its defining
+trait is that it solves the \emph{forward} problem — reference shape $+$ material
+$+$ load $\Rightarrow$ deformed shape $+$ stress — and therefore \emph{requires}
+material parameters and the unstressed geometry, neither of which is measured for
+an embryo.  Hence FEM is a validation, not the primary method.
+
+\paragraph{(d) Inverse / inference methods (the niche of this work).}
+One observes the \emph{current} (deformed) shape and the pressure but knows
+neither the reference configuration nor the material.  Exploiting static
+determinacy (\S\ref{sec:el-determinacy}), equilibrium is solved directly on the
+observed surface.  Curved Monolayer Stress Microscopy (cMSM; Mar\'in-Llaurad\'o
+\textit{et al.}, 2023) does this with a globally parametrised linear-triangle FEM
+and is restricted to open domes; the present GFDM approach uses a local-frame
+finite-difference discretisation and generalises to \emph{closed / arbitrary}
+topology, which is the methodological contribution.
+
+%% -------------------------------------------------------------------------
+\subsection{The constitutive ladder and where this method sits}
+\label{sec:el-ladder}
+
+The whole field organises cleanly by ``how much physics beyond equilibrium one
+is forced to add'':
+
+\begin{center}
+\begin{tabular}{llcc}
+\toprule
+\textbf{Level} & \textbf{What is added} & \textbf{Determinate?} & \textbf{Needs material?} \\
+\midrule
+Membrane equilibrium       & nothing (geometry $+\,\Delta p$)        & yes$^\ast$ & no \\
+$+$ linear elasticity      & small-strain Hooke, kinematics          & ---        & yes \\
+$+$ bending (shell)        & moments $\mathbf M$                     & no         & yes \\
+$+$ finite-strain hyperel. & neo-Hookean / Ogden                     & no         & yes \\
+\bottomrule
+\end{tabular}
+\end{center}
+\noindent{\small $^\ast$ Determinate pointwise; closed surfaces retain a
+finite-dimensional self-equilibrating null space (\S\ref{sec:null-modes}).}
+
+\medskip
+The tension-inference pipeline deliberately stays on the \emph{top rung} (methods
+M1/M2) and descends to the bottom rung only for the independent FEM cross-check
+(M3).  The honest scientific consequence — because tension is statically
+determinate — is that the interesting material/thickness coupling (a
+dorsoventral-varying $t$) can \emph{only} be probed at the FEM level: at the
+membrane level $t$ is a passive divisor (\S\ref{sec:thickness}).
+
+This also explains why the present method exists at all.  The ``usual'' route for
+a known, simple, axisymmetric shape is analytic membrane theory (M1); the
+``usual'' route for an arbitrary shape with known material is forward FEM (M3).
+The problem here is neither: an \emph{arbitrary closed shape with unknown material
+observed in its loaded state}.  That box is filled only by equilibrium-based
+inference on the observed surface (M2), and showing that all three methods agree
+on the sphere and spheroid — where each is computable — is what licenses using
+M2 alone on the embryo.
+
+%% =========================================================================
 \section{Surface geometry and local frame}
 \label{sec:geometry}
 
