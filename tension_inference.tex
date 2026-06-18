@@ -527,6 +527,23 @@ Laplacian post-smoothing pass
 ($\sigma\leftarrow(1-\alpha)\sigma+\alpha\bar\sigma_{1\text{-ring}}$,
 $\alpha=0.5$, ${\sim}12$ iterations).
 
+\paragraph{Solving the normal equations.}
+For small meshes the symmetric system~\eqref{eq:tikhonov} is factored
+directly with a sparse LU.  This is exact but scales poorly: the depth-3
+GFDM stencils carry ${\sim}30$ non-zeros per row, so $L^\top L$ has
+${\sim}900$ non-zeros per row and the factorisation suffers heavy fill-in
+— empirically the solve time grows by ${\sim}\times35$ for each
+${\times}4$ in the number of DOFs (\S\ref{sec:resolution-requirement},
+Table~\ref{tab:timing}).  Above a DOF threshold we therefore switch to an
+iterative least-squares solver (\texttt{lsqr}) applied directly to the
+augmented system $[\,L\,;\,\lambda R\,]\vv{s}=[\,\vv{b}\,;\,\vv{0}\,]$,
+which avoids forming $L^\top L$ and its fill-in and scales far more
+gently.  Both solvers minimise the same objective~\eqref{eq:tikhonovobjective}
+and agree to solver tolerance.  The crossover threshold should be set
+around $20$--$30\,000$ DOFs (${\sim}7$--$10\,000$ vertices): beyond that
+the iterative path is already faster than the direct one, so a higher
+threshold needlessly leaves mid-size meshes on the slow direct solve.
+
 %% =========================================================================
 \section{Extracting the principal curvature frame}
 \label{sec:pc-frame}
