@@ -1168,6 +1168,42 @@ $p_{90}$ tail) — impractical uniformly.  The practical recommendations are:
   \label{fig:resolution}
 \end{figure}
 
+\paragraph{Computational cost and scaling.}
+The refinement target is constrained not only by accuracy but by solve
+time (Table~\ref{tab:timing}).  The solve forms the normal equations
+$(L^\top L+\lambda^2 R^\top R)$ and factors them with a sparse direct
+solver up to a DOF threshold, switching to iterative \texttt{lsqr} above
+it.  The direct path scales steeply — roughly $\times35$ in time per
+$\times4$ in DOFs — because the depth-3 GFDM stencils ($\sim$30 non-zeros
+per row) make $L^\top L$ relatively dense ($\sim$900 non-zeros per row),
+so the factorisation suffers heavy fill-in.  In practice this means a
+subdiv-5 mesh ($\sim$10\,k vertices) already costs several minutes on the
+direct path, while the iterative solver handles a four-times-larger
+subdiv-6 mesh in comparable time.  The current crossover threshold
+($60\,000$ DOFs) is set too high — subdiv-5 stays on the slow direct path
+when \texttt{lsqr} would be faster; lowering it to ${\sim}20$--$30\,000$
+DOFs is a cheap improvement.  The HH20 embryo ($n=3766$, ${\sim}11\,$k
+DOFs) solves in ${\sim}15$--$30$\,s; a $4\times10^{4}$-vertex
+adaptively-refined target would sit in the subdiv-6 regime
+(${\sim}10$\,min with \texttt{lsqr}).
+
+\begin{table}[ht]\centering
+\caption{Wall-clock solve time vs mesh size (IcoSphere, depth-3,
+$\lambda=0.05$, single machine).  ``Direct'' = sparse LU on the normal
+equations; ``lsqr'' = iterative least squares on the augmented system.}
+\label{tab:timing}
+\begin{tabular}{lrrlr}
+\toprule
+Mesh & $n$ (vertices) & DOFs ($3n$) & Solver & Time \\
+\midrule
+subdiv-3 &    642 &   1\,926 & direct & 0.7\,s \\
+subdiv-4 &  2\,562 &   7\,686 & direct & 7.6\,s \\
+subdiv-5 & 10\,242 &  30\,726 & direct & 267\,s \\
+subdiv-6 & 40\,962 & 122\,886 & lsqr   & 532\,s \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 %% -------------------------------------------------------------------------
 \subsection{FEM cross-check (M3)}
 

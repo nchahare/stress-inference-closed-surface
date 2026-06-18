@@ -143,6 +143,25 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
   pattern (low-k), which a gradient penalty can't kill without flattening the real signal; their
   penalty relies on the open-dome pinned boundary we don't have. So **do NOT adopt cMSM reg** —
   Laplacian smoothing is necessary and sufficient. Details in `stress_estimation.tex` §6.
+- **Mesh resolution requirement (embryo) — `mesh_resolution_study.py`, tension_inference §9.7.**
+  The controlling variable is the dimensionless **`h·κ`** (mesh spacing × curvature = 1/elements-
+  per-curvature-radius). Error vs `h·κ`: sphere needs `h·κ≲0.05` (~20 elem/radius) for ~3%;
+  spheroid more forgiving (<4% at `h·κ≈0.18`). **HH20 embryo (n=3766) sits at h·κ≈0.17 median,
+  0.44 p90 — COARSER than our coarsest test (sphere subdiv-3 h·κ=0.14).** ⇒ worst-case (high-
+  curvature folds) error ≳10%; smooth tube-body ~few %. Uniform refinement to h·κ=0.05 needs
+  ~4e4 verts (~3e5 to fix the p90 tail) → **use curvature-ADAPTIVE refinement, not uniform**;
+  ship a per-vertex `h·κ` quality map, flag `h·κ>0.1` as low-confidence.
+- **λ=0.05 confirmed near-optimal** (same study): spheroid λ-sweep is U-shaped — σ_max err min
+  0.9% at λ=0.05, rises to 5.8% at λ=0.2 (over-smooths anisotropy); λ=0.005 leaves 6.6% (null
+  modes). At λ=0 on the sphere ε≈1e-7 but error ~1900% → **residual is a diagnostic, NOT the
+  objective; the correct ε at the optimum is ~2e-2, not the smallest achievable.**
+- **Solve timing & scaling** (sphere, depth-3, this machine): sd3 (n=642) 0.7s · sd4 (2562) 7.6s ·
+  sd5 (10242) **267s** · sd6 (40962, lsqr) 532s. Direct sparse solve on the normal equations
+  `(LᵀL+λ²RᵀR)` scales ~×35 per ×4 dof (depth-3 stencil ~30 nnz/row → LᵀL ~900 nnz/row, heavy
+  fill-in). `lsqr_thresh=60000` dof (=20k verts) is **too high**: sd5 (30726 dof) stays on the
+  slow direct path (267s) when lsqr would be faster — lower the threshold (~20–30k dof) so sd5+
+  use iterative. Embryo (n=3766, ~11k dof) ≈ 15–30s direct. A 4e4-vertex adaptive target ≈ sd6
+  territory (~9 min, lsqr).
 
 ## Files
 - `sphere_curvature.py` — per-vertex curvature, normals, local axes (`compute_vertex_frames`).
