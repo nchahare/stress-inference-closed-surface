@@ -922,13 +922,36 @@ subdiv & $n$ & $h$ & err\_mean (raw) & err\_mean (sm) & dev std (raw) [Pa] & dev
 \subsection{Pressure and thickness linearity}
 
 For a statically-determinate membrane the stress scales exactly as
-$\sigma\propto\Delta p/t$.  Verify on the sphere and spheroid that:
+$\sigma\propto\Delta p/t$.  Concretely:
 \begin{equation}
   \sigma_1(\Delta p_2,\,t_2)
   = \frac{\Delta p_2/t_2}{\Delta p_1/t_1}\;\sigma_1(\Delta p_1,\,t_1).
 \end{equation}
-This is a fast, parameter-free sanity check that does not require analytic
-knowledge.
+
+The test was run on the sphere ($R=1$) and prolate spheroid ($a=2$, $b=1$) at
+six $(\Delta p,\,t)$ combinations spanning a factor of eight in $\Delta p/t$
+(Figure~\ref{fig:linearity}).  Two routes reach the same $\Delta p/t$: varying
+$\Delta p$ at fixed $t=0.05$ (circles), and varying $t$ at fixed $\Delta p=20$\,Pa
+(squares).
+
+\begin{figure}[ht]\centering
+  \includegraphics[width=\textwidth]{out/linearity_test.png}
+  \caption{Linearity test: mean $\sigma_1$ vs $\Delta p/t$ for the sphere (left)
+  and spheroid (right).  Circles: $t=0.05$ fixed, $\Delta p$ varied.
+  Squares: $\Delta p=20$\,Pa fixed, $t$ varied.  Solid lines are the analytic
+  predictions (sphere: $\sigma=R\,\Delta p/2t$; spheroid: global surface average
+  of the axisymmetric formula).  Points from both routes overlap to four decimal
+  places, confirming exact $\sigma\propto\Delta p/t$ scaling.}
+  \label{fig:linearity}
+\end{figure}
+
+\noindent
+The ratio $\sigma/(\Delta p/t)$ is constant to floating-point precision across
+all six combinations (sphere: $0.5316$; spheroid $\sigma_1$: $0.7188$),
+confirming that the solver is exactly linear in $\Delta p$ and exactly inversely
+proportional to $t$ by construction.  The small offset from the sphere analytic
+($0.5316$ vs $0.500$) is the systematic null-mode bias already quantified in
+\S\ref{sec:benchmarks} — it is constant across all runs, not a linearity error.
 
 %% -------------------------------------------------------------------------
 \subsection{Equilibrium residual}
