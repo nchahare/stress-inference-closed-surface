@@ -144,11 +144,15 @@ the neural-tube tension landscape** synthesising the two added reference papers
 the shared equilibrium core, the total-tension vs elastic/active split equilibrium cannot
 resolve, two equilibrium-derived active signatures (principal-axis tilt and compressive
 `σ_min`), and a falsifiable HH17→HH20 thesis. Finally a **§12 stress-based FEM chapter**
-(**planned alternative discretisation, not yet implemented**): the primal virtual-work weak
-form `∫ N:ε_s(w) = ∫ Δp·n·w`, P1 nodal stress + P1 vector test → square 3n system (faithfully
+(**implemented**, `membrane_stress_fem.py`): the primal virtual-work weak form
+`∫ N:ε_s(w) = ∫ Δp·n·w`, P1 nodal stress + P1 vector test → square 3n system (faithfully
 cMSM on a *closed* surface), element assembly + consistent load, the singular-system solve
-(min-norm `lsqr` then Tikhonov), and the design decisions (formulation = primal virtual-work,
-hand-rolled `scipy.sparse`, P1 local-frame DOFs) + sphere-first validation plan.
+(min-norm `lsqr` then Tikhonov with a FEM-native 1-ring roughness), and the results: the
+**raw min-norm FEM shows the same "lines" as GFDM** → the closed-surface artefact is intrinsic
+to the indeterminacy, not a GFDM-stencil effect (and cMSM is singular on a closed surface);
+regularised FEM is **as/more accurate** than GFDM (sphere dev-std 4.4 vs 6.5, spheroid σ_max
+1.7% vs 3.6%) and **~5–12× faster** (subdiv-4 2.0 s vs 10.3 s; subdiv-5 9.2 s vs 110 s), since
+the P1 `K` is 6.6× sparser than the depth-3 GFDM `LᵀL`.
 
 ```powershell
 # per-vertex principal curvature frame: kappa1, kappa2, e1, e2 (world R3), n
@@ -334,7 +338,8 @@ Discretization:
 Last updated: **2026-06-18 (UTC-04:00)**
 
 ### Done
-- [x] **Stress-based FEM methodology decided + documented** (`tension_inference` **§12**, planned not-yet-built) — chose **primal virtual-work (cMSM-style)** weak form `∫ N:ε_s(w)=∫ Δp·n·w`, **hand-rolled `scipy.sparse`**, P1 nodal local-frame DOFs (square 3n system); documented element assembly, consistent load, singular-system solve (min-norm `lsqr` → Tikhonov), and the sphere-first validation plan. Runners-up (LSFEM, mixed Hellinger–Reissner) weighed and recorded — _2026-06-18_
+- [x] **Stress-based FEM IMPLEMENTED + validated** (`membrane_stress_fem.py`, `tension_inference` **§12**) — primal virtual-work (cMSM-style) weak form `∫ N:ε_s(w)=∫ Δp·n·w`, hand-rolled `scipy.sparse`, P1 nodal local-frame DOFs (square 3n system); element assembly + consistent load; singular-system solve = raw min-norm `lsqr` then Tikhonov with a **FEM-native 1-ring roughness** (Frobenius-matched so λ=0.05 matches GFDM); auto-iterative `lsqr` above 20k DOFs. **Findings:** raw FEM shows the same "lines" as GFDM ⇒ artefact is intrinsic to the indeterminacy, not a GFDM stencil effect (cMSM singular on closed surfaces); regularised FEM ≥ GFDM accuracy (sphere dev-std 4.4 vs 6.5, spheroid σ_max 1.7% vs 3.6%); **~5–12× faster** (subdiv-4 2.0 vs 10.3 s, subdiv-5 9.2 vs 110 s) — KᵀK is 6.6× sparser (57 vs 376 nnz/row) — _2026-06-18_
+- [x] **Stress-based FEM methodology decided + documented** (`tension_inference` **§12**) — chose **primal virtual-work (cMSM-style)**, **hand-rolled `scipy.sparse`**, P1 nodal local-frame DOFs; runners-up (LSFEM, mixed Hellinger–Reissner) weighed and recorded — _2026-06-18_
 - [x] **`tension_inference` conceptual expansion** — added **§1 elastostatics framing** (problem class, static determinacy, four method families, M1/M2/M3 constitutive ladder), **§3.4 fluid-vs-elastic limit** (`N=γP`/Young–Laplace + Marangoni; heterogeneous tension forces deviatoric shear; 1-dof-fluid vs 3-dof-elastic determinacy), **§11 neural-tube interpretation** synthesising the two added reference papers (Romo et al. 2014 passive bulge-inflation; Bal et al. 2026 active-gel shell) — total-vs-active split, tilt + compressive-`σ_min` active signatures, falsifiable HH17→HH20 thesis — and a **bibliography**. All section numbers shifted +1; PDF recompiled — _2026-06-18_
 - [x] Selected `fem_env` (scikit-fem 12.0.1, Python 3.11); installed `vedo` (git, 2026.6.2.dev7) + `vtk 9.6.2`; `scipy 1.14.1` present — _2026-06-15_
 - [x] `sphere_curvature.py` — per-vertex curvature, normals, local axes; validated vs analytic sphere (radii ~1–2% @res40, ~0.5% @res80; normals <1.6° of radial; correct R-scaling & convergence) — _2026-06-15_
@@ -418,7 +423,6 @@ M1+M2 on **HH17 (decimated to HH20's 3766 pts) + HH20** for the real-mesh compar
   tension/compression split — exactly why the inference solve is needed there.
 
 ### To do
-- [ ] **Implement the §12 stress-based FEM** (`membrane_stress_fem.py`) — primal virtual-work / cMSM-style, hand-rolled `scipy.sparse`, P1 nodal local-frame DOFs; validate on sphere (σ=200 Pa, deviatoric-std lines indicator) then spheroid, head-to-head with GFDM. Tests whether the closed-surface "lines" are intrinsic (indeterminacy) or a GFDM-stencil artefact, and puts cMSM's exact formulation on a closed surface.
 - [ ] **Verify the §11 neural-tube thesis on saved HH20 fields** — check whether the two active signatures (principal-axis tilt `δ=|r|/(|p|+|q|)` and compressive `σ_min<0`) actually localise *coherently* (and to the high-`h·κ` folds) rather than as noise, before the interpretation goes in a manuscript. This is the data-check deferred from the conceptual write-up.
 - [ ] **Thickness field** — run with measured non-uniform `t(x)` vs uniform placeholder; this is the headline R2 result
 - [ ] **Hyperelastic FEM cross-check** (R3 / method M3) — **run our own neo-Hookean FEM** inflations of our geometries (sphere, ellipsoid, neural tube) at **Δp=20 Pa** and compare σ₁,σ₂ to the GFDM inference. The archived cMSM `.mat` fields are **not** reusable as ground truth — their geometries, material parameters, and 400 Pa loading differ from ours; the comparison must use a forward model consistent with our inference inputs.
@@ -432,6 +436,7 @@ M1+M2 on **HH17 (decimated to HH20's 3766 pts) + HH20** for the real-mesh compar
 - `curvature_compare.py` — mean-curvature + normals; sphere vs stretched
 - `surface_fd.py` — GFDM surface-derivative operators (+ self-test)
 - `membrane_stress_fd.py` — direct GFDM membrane-stress solve (σ₁, σ₂); auto lsqr for large meshes
+- `membrane_stress_fem.py` — **stress-based FEM** (tension_inference §12): primal virtual-work (cMSM-style), P1 nodal local-frame DOFs, square 3n system, FEM-native 1-ring roughness, auto-iterative solve; raw vs Tikhonov, head-to-head with GFDM; `--show` for the interactive 2-panel viewer, `--raw` to see the lines. ~5–12× faster than GFDM and ≥ its accuracy
 - `stress_smoothing_compare.py` — Laplacian smoothing of σ; raw vs smoothed vs mean
 - `membrane_stress_beltrami.py` — Beltrami/Airy stress-function solve (single scalar Φ)
 - `reg_compare.py` — cMSM-style (grad-trace + curl) regularization vs our Laplacian smoothing
@@ -450,7 +455,7 @@ M1+M2 on **HH17 (decimated to HH20's 3766 pts) + HH20** for the real-mesh compar
 - `linearity_test.py` — §10.3 σ ∝ Δp/t check over 6 (Δp,t) combos → `out/linearity_test.png`
 - `residual_test.py` — §10.4 per-vertex equilibrium-residual surface maps (sphere/spheroid/capsule) → `out/residual_map.png`
 - `mesh_resolution_study.py` — §10.7 error vs dimensionless `h·κ` with embryo band + λ tradeoff U-curve → `out/mesh_resolution_study.png`
-- `tension_inference.tex` / `.pdf` — standalone derivation: **§1 elastostatics framing** (problem class, static determinacy, method families, constitutive ladder), surface geometry, membrane balance (normal + tangential), thickness role, **§3.4 fluid-vs-elastic limit** (`N=γP`/Marangoni; heterogeneous tension forces shear), GFDM (+ solver choice), curvature-frame extraction, principal stress directions, the §10 validation suite (benchmarks, convergence, linearity, residual maps, resolution/timing), **§11 neural-tube interpretation** (Romo 2014 + Bal 2026: total-vs-active split, tilt/compression active signatures, HH17→HH20 thesis), **§12 stress-based FEM chapter** (planned alternative discretisation: primal virtual-work / cMSM-style, P1 square system, build spec + validation plan), and a **bibliography**
+- `tension_inference.tex` / `.pdf` — standalone derivation: **§1 elastostatics framing** (problem class, static determinacy, method families, constitutive ladder), surface geometry, membrane balance (normal + tangential), thickness role, **§3.4 fluid-vs-elastic limit** (`N=γP`/Marangoni; heterogeneous tension forces shear), GFDM (+ solver choice), curvature-frame extraction, principal stress directions, the §10 validation suite (benchmarks, convergence, linearity, residual maps, resolution/timing), **§11 neural-tube interpretation** (Romo 2014 + Bal 2026: total-vs-active split, tilt/compression active signatures, HH17→HH20 thesis), **§12 stress-based FEM** (implemented: primal virtual-work / cMSM-style, P1 square system; results — lines intrinsic, accuracy ≥ GFDM, ~5–12× faster), and a **bibliography**
 - `show_e2_spheroid.py` — sign-consistency visualiser for **e₂** on spheroid (cyan=consistent, red=flipped; 2 residual singularities at umbilic poles)
 - `show_e2_sphere.py` — sign-consistency visualiser on sphere (totally umbilic worst case; 314 inconsistent after BFS — hairy ball theorem)
 - `show_capsule.py` — capsule mesh builder (`make_capsule`) + three-region curvature validation + sign-consistency viewer (mesh coloured by discriminant d=|κ₁−κ₂|/2)

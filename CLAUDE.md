@@ -188,31 +188,41 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
   thesis: HH17→HH20 tension rise/anisotropy is accompanied by growing δ and compressive zones
   localising at high-`h·κ` folds; those active-signature regions (not peak-tension) mark active
   shape change. **TODO when ready: verify δ + σ_min<0 actually localise coherently on saved HH20.**
-- **Stress-based FEM — DECIDED, NOT YET BUILT (tension_inference §12; `membrane_stress_fem.py`
-  to be written):** an alternative discretisation of the SAME balance law `div_s N+Δp·n=0`, to
-  test whether the closed-surface "lines" are intrinsic to the indeterminacy or a GFDM-stencil
-  artefact (and to put cMSM's exact formulation on a CLOSED surface). **Decisions (user choices):**
-  formulation = **primal virtual-work / cMSM-style** (`∫ N:ε_s(w)=∫ Δp·n·w`, P1 nodal stress
-  trial + P1 vector test → SQUARE 3n×3n system); package = **hand-rolled `scipy.sparse`** (no
-  framework; tensor integrands are custom regardless); representation = **P1 nodal (p,q,r) in the
-  per-vertex local frame** (same DOF as GFDM for like-for-like); regulariser = the GFDM roughness
-  op, λ=0.05; mesh = IcoSphere. Runners-up **ruled out**: LSFEM (SPD, constitutive-free, GFDM twin
-  — kept as fallback) and mixed Hellinger–Reissner (structurally null-mode-free BUT needs a
-  compliance ⇒ not constitutive-free, and symmetric-stress H(div) surface elements have no package
-  support ⇒ research-grade). **Assembly:** per-tri P1 surface-grad `g_j=(n_T×(x_k−x_i))/(2A_T)`
-  const per triangle; element block `(A_T/3)·Σ_{m∈T}(N_m g_j)_d`; consistent load via P1 mass
-  `M^T_jm=(A_T/12)(1+δ)`. **Solve:** K is square but SINGULAR (closed-surface null modes); load is
-  consistent (net pressure force/torque=0); (i) raw min-norm via `lsqr` (look for lines), then
-  (ii) Tikhonov `‖Ks−b‖²+λ²‖Rs‖²`. σ₁,σ₂=eig([[p,r],[r,q]])/t (same post-proc). **Validate sphere
-  first** (σ=200 Pa @ dp=20,t=0.05; deviatoric-std = lines indicator) → spheroid (ratio 1.75),
-  head-to-head with GFDM. Reuse vedo IcoSphere+`mesh.cells`, `compute_vertex_frames` (+outward
-  flip), `analytic_axisym`, `report`, `show` from `membrane_stress_fd.py`.
+- **Stress-based FEM — IMPLEMENTED & validated (`membrane_stress_fem.py`, tension_inference §12).**
+  Alternative discretisation of the SAME balance `div_s N+Δp·n=0`. Formulation = **primal
+  virtual-work / cMSM-style** (`∫ N:ε_s(w)=∫ Δp·n·w`, P1 nodal stress trial + P1 vector test →
+  SQUARE 3n×3n); hand-rolled `scipy.sparse`; P1 nodal (p,q,r) in per-vertex local frame (same DOF
+  as GFDM). **Assembly:** per-tri P1 surface-grad `g_j=(n_T×opp_j)/(2A_T)` (use TRIANGLE normal
+  from vertex ordering, intrinsic); element block `(A_T/3)·Σ_{m∈T}(N_m g_j)_d`; consistent load
+  P1 mass `M^T_jm=(A_T/12)(1+δ)`. **Roughness is now FEM-NATIVE** (NOT the GFDM op): `R=[D@C_ab]`,
+  C_ab=`_component_operator` (frame algebra, reused from membrane_stress_fd), D = area-weighted P1
+  surface-gradient (from the same `g_j`) → `‖Rs‖²=∫Σ_ab|∇_s N_ab|²`. **Scale fix (KEY BUG we hit):**
+  FEM K is area-weighted (~h), R~O(1), so a bare λ mis-scales by ~h⁻⁴ and collapses the solve to
+  mean≈39; fix = `w=λ·‖K‖_F/‖R‖_F` so λ=0.05 means the same as GFDM. **Solve:** K square but
+  SINGULAR; load consistent (net force/torque=0); (i) optional raw min-norm `lsqr` (lines
+  diagnostic, `raw=True`), (ii) Tikhonov direct `(KᵀK+w²RᵀR)` or auto-`lsqr` on `[K;wR]` above
+  20k DOFs. σ₁,σ₂=eig([[p,r],[r,q]])/t. **RESULTS (subdiv-4, dp=20, t=0.05):** raw FEM dev-std
+  **216** (= same lines as raw GFDM) ⇒ **the lines are INTRINSIC to the indeterminacy, not a GFDM
+  stencil artefact**; also confirms cMSM is singular on closed surfaces. Regularised FEM ≥ GFDM
+  accuracy: sphere mean 0.3% (GFDM 1.1%), dev-std 4.4 (GFDM 6.5), spheroid σ_max 1.7% (GFDM 3.6%),
+  σ_min ~19% (GFDM ~23%; hardest for both). **TIMING: FEM ~5–12× FASTER** (sd4 2.0s vs 10.3s; sd5
+  9.2s vs 110s) — KᵀK is 6.6× sparser (57 vs 376 nnz/row, P1 1-ring vs depth-3) + no WLS op build
+  + iterative. ⇒ FEM is the better engine for embryo-scale adaptive meshes. Runners-up ruled out:
+  LSFEM (SPD GFDM twin, fallback), mixed Hellinger–Reissner (needs compliance ⇒ not
+  constitutive-free; symmetric H(div) surface elements unsupported). Reuses vedo IcoSphere+
+  `mesh.cells`, `compute_vertex_frames`(+outward flip), `analytic_axisym`/`report`/`show`/
+  `_component_operator` from `membrane_stress_fd.py`. `--show` = interactive 2-panel viewer,
+  `--raw` shows the lines.
 
 ## Files
 - `sphere_curvature.py` — per-vertex curvature, normals, local axes (`compute_vertex_frames`).
 - `curvature_compare.py` — mean curvature + normal arrows, sphere vs stretched.
 - `surface_fd.py` — GFDM surface-derivative operators + self-test.
 - `membrane_stress_fd.py` — direct GFDM membrane-stress solve (σ₁, σ₂); arbitrary fit frame.
+- `membrane_stress_fem.py` — **stress-based FEM** (§12): primal virtual-work, P1 nodal local-frame
+  DOFs, square 3n system, FEM-native 1-ring roughness, auto-iterative; `assemble_fem`,
+  `fem_roughness_operator`, `solve_membrane_fem`, `show_interactive`. ~5–12× faster than GFDM,
+  ≥ accuracy; raw min-norm reproduces the lines (intrinsic). `--show`/`--raw`.
 - `membrane_stress_fd_v2.py` — same solve in the **principal curvature frame** (e1, e2 from
   `compute_curvature_frame`); adds `d1`, `d2` (principal stress directions, world R³), `r`
   shear diagnostic, and per-vertex `resid_pv`; includes `make_capsule` and `plot_stress_frame`
@@ -255,8 +265,8 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
   §10.1 benchmarks, §10.2 convergence, §10.3 linearity, §10.4 residual maps, §10.7 mesh-resolution
   (`h·κ`) + timing; §10.5/10.6/10.8 (shear, smoothing, FEM) still proposed. **§11 biological
   interpretation: neural-tube tension landscape** — NEW, synthesises Romo 2014 + Bal 2026 (see
-  key-facts bullet below). **§12 stress-based FEM chapter** — NEW, **planned alternative
-  discretisation, NOT yet implemented** (build spec; see key-facts bullet below).
+  key-facts bullet below). **§12 stress-based FEM chapter** — NEW, **IMPLEMENTED**
+  (`membrane_stress_fem.py`) with results table + timing (see key-facts bullet below).
 - `benchmark_analytic.py` — §10.1 figure: sphere/spheroid/capsule vs exact (latitude scatter).
 - `convergence_study.py` — §10.2: error & spurious-deviatoric vs h (subdiv 3-6).
 - `linearity_test.py` — §10.3: σ ∝ Δp/t over 6 (Δp,t) combos.

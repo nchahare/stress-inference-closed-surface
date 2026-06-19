@@ -1723,15 +1723,15 @@ everywhere) makes the active interpretation discriminating rather than
 descriptive.
 
 %% =========================================================================
-\section{Stress-based finite-element discretisation (planned alternative to GFDM)}
+\section{Stress-based finite-element discretisation: an alternative to GFDM}
 \label{sec:fem}
 
 The generalised finite-difference scheme of Section~\ref{sec:gfdm} is one
-discretisation of the balance law~\eqref{eq:equil}.  This section records the
-formulation of an \emph{independent} finite-element discretisation of the
-\emph{same} equation, chosen as a methodological cross-check.  \textbf{It is a
-decided design, not yet implemented} at the time of writing; the equations and
-choices below are the build specification.
+discretisation of the balance law~\eqref{eq:equil}.  This section develops an
+\emph{independent} finite-element discretisation of the \emph{same} equation as a
+methodological cross-check, implemented in \texttt{membrane\_stress\_fem.py}; the
+validation, the intrinsic-lines finding and the timing are in
+Section~\ref{sec:fem-results}.
 
 Three questions motivate it.  (i) Is the closed-surface ``lines'' artefact
 (Section~\ref{sec:null-modes}) intrinsic to the statically-indeterminate problem,
@@ -1816,10 +1816,17 @@ $\ell=0$).  The solve proceeds in two stages:
         which returns the minimum-norm least-squares solution (no regularisation).
         The headline diagnostic is whether the raw field carries the same
         triangulation ``lines'' as the raw GFDM solve.
-  \item \textbf{Regularised.}  Minimise $\|K\vv s-\vv b\|^2+\lambda^2\|R\vv
-        s\|^2$ with the \emph{same} roughness operator $R$ and weight
-        $\lambda=0.05$ as the GFDM solve (Section~\ref{sec:tikhonov}), for a
-        controlled side-by-side.
+  \item \textbf{Regularised.}  Minimise $\|K\vv s-\vv b\|^2+w^2\|R\vv s\|^2$ with a
+        \emph{FEM-native} roughness $R$ --- the area-weighted P1 surface gradient
+        of the ambient stress components, $\|R\vv s\|^2=\int_\Gamma\sum_{ab}
+        |\nabla_s N_{ab}|^2\,dS$, built from the same element gradients $\vv g_j$
+        and the per-vertex frames (no GFDM operators).  Because the virtual-work
+        $K$ is area-weighted (entries ${\sim}h$) while $R\sim O(1)$, a bare
+        $\lambda$ would mis-scale by ${\sim}h^{-4}$ and collapse the solution; we
+        set $w=\lambda\,\|K\|_F/\|R\|_F$ so that $\lambda=0.05$ is the same
+        dimensionless weight as in the GFDM solve.  Small systems factor the normal
+        equations $(K^\top K+w^2R^\top R)$ directly; large ones use iterative
+        \texttt{lsqr} on $[\,K;\,wR\,]$ (the sparse P1 $K$ makes this scale gently).
 \end{enumerate}
 Principal stresses are then $\sigma_1,\sigma_2 = \mathrm{eig}
 \bigl[\begin{smallmatrix}p&r\\ r&q\end{smallmatrix}\bigr]/t$, identical
@@ -1841,7 +1848,9 @@ notes):
         support) were the runners-up.
   \item \textbf{Representation:} P1 nodal stress in the per-vertex local frame
         ($3$ DOF, identical to GFDM, for a like-for-like comparison).
-  \item \textbf{Regulariser:} the GFDM roughness operator (Section~\ref{sec:tikhonov}).
+  \item \textbf{Regulariser:} a FEM-native 1-ring roughness
+        ($\int|\nabla_s N|^2$ from the P1 element gradients), Frobenius-matched to
+        $K$ so $\lambda=0.05$ is the same weight as GFDM.
   \item \textbf{Implementation:} hand-rolled with \texttt{scipy.sparse}
         (consistent with the no-framework rule; the symmetric-tangential-tensor
         unknown is non-standard, so the tensor integrands are custom regardless
@@ -1849,14 +1858,73 @@ notes):
         plotting infrastructure.
   \item \textbf{Mesh:} IcoSphere, consistent with the rest of the suite.
 \end{itemize}
-Validation follows the project rule of checking every new path against the
-analytic sphere first: \textbf{sphere} ($R=1$, $\Delta p=20$\,Pa, $t=0.05$)
-expecting $\sigma_1=\sigma_2=200$\,Pa, reporting the mean error and the
-deviatoric standard deviation (the lines indicator) raw vs regularised and
-head-to-head with GFDM (Section~\ref{sec:benchmarks}); then the \textbf{prolate
-spheroid} ($2{:}1$) for the equatorial anisotropy ratio $1.75$.  Agreement with
-GFDM would confirm the lines are intrinsic to the indeterminate closed-surface
-problem rather than a stencil artefact; a discrepancy would localise the cause.
+%% -------------------------------------------------------------------------
+\subsection{Results: accuracy, the intrinsic lines, and timing}
+\label{sec:fem-results}
+
+The method was validated on the sphere ($R=1$) and prolate spheroid ($2{:}1$) at
+IcoSphere subdiv-4 ($n=2562$), $\Delta p=20$\,Pa, $t=0.05$, depth-3,
+$\lambda=0.05$, head-to-head with the GFDM solve (Table~\ref{tab:fem}).
+
+\begin{table}[ht]\centering
+\caption{Stress FEM vs GFDM (subdiv-4, $\Delta p=20$\,Pa, $t=0.05$).  ``dev-std''
+is the standard deviation of the deviatoric $(\sigma_1-\sigma_2)/2$ on the sphere,
+which should be $0$ --- the lines indicator.  Spheroid errors are over the
+equatorial belt.}
+\label{tab:fem}
+\begin{tabular}{lrrrr}
+\toprule
+ & sphere mean (err) & sphere dev-std & spheroid $\sigma_{\max}$ & spheroid $\sigma_{\min}$ \\
+\midrule
+FEM raw (min-norm) & $199.6$ ($0.2\%$) & $216$  & ---      & ---       \\
+FEM Tikhonov       & $199.4$ ($0.3\%$) & $4.4$  & $1.7\%$  & $19.4\%$  \\
+GFDM (Tikhonov)    & $202.1$ ($1.1\%$) & $6.5$  & $3.6\%$  & $22.8\%$  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{The lines are intrinsic, not a stencil artefact.}  The raw min-norm
+FEM --- a completely different discretisation (Galerkin element integration rather
+than local WLS collocation) --- produces a spurious deviatoric of the same
+character as the raw GFDM solve (dev-std $216$ on a field that must be $0$, growing
+from $73$ at subdiv-3 as the near-null singular values shrink).  This confirms that
+the closed-surface streaks come from the static indeterminacy itself
+(Section~\ref{sec:null-modes}), not from the GFDM stencils; equivalently, cMSM's
+formulation is singular on a closed surface and relies on its open-dome boundary to
+be well posed.
+
+\paragraph{Regularised accuracy.}  With the FEM-native roughness the regularised
+FEM is at least as accurate as GFDM and better on most metrics: a cleaner sphere
+deviatoric ($4.4$ vs $6.5$) and a better spheroid $\sigma_{\max}$ ($1.7\%$ vs
+$3.6\%$).  The compressive $\sigma_{\min}$ remains the hardest quantity for both
+(${\sim}20\%$ at this resolution).
+
+\paragraph{Timing: the FEM is markedly faster and scales better.}  Although both
+methods solve systems of the same size, the P1 stiffness $K$ couples only 1-ring
+neighbours, so $K^\top K$ has ${\sim}57$ non-zeros per row against ${\sim}376$ for
+the depth-3 GFDM $L^\top L$ --- a $6.6\times$ sparser system, with no per-vertex
+weighted-least-squares operator to build.  The lean FEM (FEM-native $R$, no raw
+diagnostic, iterative \texttt{lsqr} above $20\,000$ DOFs) therefore out-paces GFDM
+by a margin that \emph{grows} with mesh size (Table~\ref{tab:femtiming}):
+${\sim}5\times$ at subdiv-4 and ${\sim}12\times$ at subdiv-5.  This makes the FEM
+the more attractive engine for the embryo-scale, curvature-adaptively-refined
+meshes of Section~\ref{sec:resolution-requirement}, where the GFDM
+normal-equation fill-in is the bottleneck.
+
+\begin{table}[ht]\centering
+\caption{Wall-clock solve time (sphere, depth-3, $\lambda=0.05$, same machine).
+GFDM uses a direct solve at subdiv-4 and \texttt{lsqr} at subdiv-5; the lean FEM
+omits the raw diagnostic and uses \texttt{lsqr} above $20\,000$ DOFs.}
+\label{tab:femtiming}
+\begin{tabular}{lrrr}
+\toprule
+mesh & DOFs & GFDM & FEM (lean) \\
+\midrule
+subdiv-4 & $7\,686$  & $10.3$\,s & $2.0$\,s \\
+subdiv-5 & $30\,726$ & $110$\,s  & $9.2$\,s \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 %% =========================================================================
 \begin{thebibliography}{Mar\'in-Llaurad\'o et al. (2023)}
