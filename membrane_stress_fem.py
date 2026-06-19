@@ -213,12 +213,14 @@ def solve_membrane_fem(mesh: vedo.Mesh, dp: float, t: float, depth: int = 3,
 
 
 def stress_scalar(r, name):
-    """Scalar stress metric per vertex. von Mises is the default equivalent stress for a
-    membrane (plane-stress); mean = isotropic tension (sigma1+sigma2)/2; shear =
-    in-plane max shear (sigma1-sigma2)/2 = anisotropy magnitude."""
+    """Scalar stress metric per vertex. trace = sigma1+sigma2 is the hydrostatic / mean
+    surface tension used by cMSM (their most robustly-recovered quantity, since the
+    grad-trace regulariser penalises its gradients); von Mises is the plane-stress
+    equivalent stress sqrt(s1^2-s1 s2+s2^2); mean = trace/2; shear = (s1-s2)/2 = anisotropy."""
     s1, s2 = r["sigma1"], r["sigma2"]
     smax, smin = np.maximum(s1, s2), np.minimum(s1, s2)
     return {
+        "trace": s1 + s2,
         "vonmises": np.sqrt(s1 ** 2 - s1 * s2 + s2 ** 2),
         "mean": (s1 + s2) / 2.0,
         "shear": (smax - smin) / 2.0,
@@ -249,7 +251,7 @@ def cross_glyphs(r, n_glyph=180):
     return objs
 
 
-def plot_fem(panels, field="vonmises", out=None, show=False):
+def plot_fem(panels, field="trace", out=None, show=False):
     """Each mesh coloured by the chosen stress scalar (shared scale) with principal-stress
     crosses overlaid. Saves to `out` and/or opens an interactive window."""
     vals = [stress_scalar(r, field) for _, r in panels]
@@ -303,9 +305,9 @@ def main():
     ap.add_argument("--stretch", type=float, default=2.0)
     ap.add_argument("--no-gfdm", action="store_true", help="skip the GFDM head-to-head")
     ap.add_argument("--raw", action="store_true", help="colour by the raw (unregularised) field")
-    ap.add_argument("--field", default="vonmises",
-                    choices=["vonmises", "mean", "shear", "sigma_max", "sigma_min"],
-                    help="mesh colour metric (default von Mises)")
+    ap.add_argument("--field", default="trace",
+                    choices=["trace", "vonmises", "mean", "shear", "sigma_max", "sigma_min"],
+                    help="mesh colour metric (default trace = sigma1+sigma2, the cMSM tension)")
     ap.add_argument("--out", default="out/membrane_stress_fem.png")
     ap.add_argument("--show", action="store_true")
     args = ap.parse_args()

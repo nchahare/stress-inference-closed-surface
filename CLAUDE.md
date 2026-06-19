@@ -143,6 +143,21 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
   pattern (low-k), which a gradient penalty can't kill without flattening the real signal; their
   penalty relies on the open-dome pinned boundary we don't have. So **do NOT adopt cMSM reg** —
   Laplacian smoothing is necessary and sufficient. Details in `stress_estimation.tex` §6.
+- **cMSM validation methodology (from the supplement, 41467_2023_38879_MOESM1_ESM.pdf §2.3.1/§2.4) —
+  how THEY quantified validity:** (i) **metric = trace(σ)=σ₁+σ₂** ("hydrostatic / mean surface
+  tension") — their MOST robustly-recovered quantity (errors much smaller over a wider λ range,
+  because the grad-trace `λ_t` penalty directly smooths trace∇); we now default the FEM viewer to it.
+  (ii) **error = `‖σ−σ_ref‖/‖σ_ref‖`** at all nodes vs ground truth: closed-form for axisym
+  (sphere/prolate/oblate caps) AND a **forward neo-Hookean FEM** (ΔP=400 Pa, μ=1 mN/m) — cMSM recovered
+  **within ~3% of FEM** (target for our M3). (iii) **λ chosen by L-curve** (reg functional `√(uᵀQu/A)`
+  vs residual `‖Au−b‖/‖b‖`): the **corner** = optimal λ_t = min-error point = onset of residual
+  increase; for experimental data (no ground truth) this L-curve corner is the selector. Confirms our
+  "residual is a diagnostic not the objective" (λ=0 → residual ~1e-5 but error largest). (iv) **det σ>0
+  inequality constraint** (positive principal tensions) for flat/concave K≤0 regions that can't hold a
+  membrane stress (fmincon) — relevant to embryo folds / our compressive-σ_min. (v) Stress **glyph =
+  orthogonal arrow-pair cross**, arms ∝ principal tension, divergence/convergence = sign; black=inferred,
+  green=expected. They emphasize membrane inference is statically DETERMINATE (unlike TFM) but `Au=b`
+  is still ill-conditioned even for a sphere ⇒ regularization needed.
 - **Mesh resolution requirement (embryo) — `mesh_resolution_study.py`, tension_inference §10.7.**
   The controlling variable is the dimensionless **`h·κ`** (mesh spacing × curvature = 1/elements-
   per-curvature-radius). Error vs `h·κ`: sphere needs `h·κ≲0.05` (~20 elem/radius) for ~3%;
@@ -223,9 +238,10 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
   DOFs, square 3n system, FEM-native 1-ring roughness, auto-iterative; `assemble_fem`,
   `fem_roughness_operator`, `solve_membrane_fem`, `plot_fem`/`cross_glyphs`/`stress_scalar`.
   Returns σ₁/σ₂ + principal **directions d₁/d₂** (θ_s=½arctan2(2r,p−q) in the fit frame). Viewer
-  colours by **von Mises** (`--field vonmises|mean|shear|sigma_max|sigma_min`) + draws
-  **principal-stress crosses** (±d₁/±d₂ segments, arms ∝|σᵢ|, red=tension/blue=compression).
-  ~5–12× faster than GFDM, ≥ accuracy; raw min-norm reproduces the lines (intrinsic). `--show`/`--raw`.
+  colours by **trace σ₁+σ₂** (cMSM's metric, default; `--field trace|vonmises|mean|shear|sigma_max|sigma_min`)
+  + draws **principal-stress crosses** (±d₁/±d₂ segments, arms ∝|σᵢ|, red=tension/blue=compression —
+  mirrors cMSM's arrow-pair glyph). ~5–12× faster than GFDM, ≥ accuracy; raw min-norm reproduces the
+  lines (intrinsic). `--show`/`--raw`.
 - `fem_validation.py` — reproduces the GFDM §10 battery for the FEM: convergence (subdiv 3–5,
   FEM vs GFDM), linearity (σ∝Δp/t), analytic benchmark (sphere/spheroid/capsule via `make_capsule`),
   λ tradeoff → `out/fem_validation.png` + tables. Reuses `one_ring_avg`/`laplacian_smooth` from
