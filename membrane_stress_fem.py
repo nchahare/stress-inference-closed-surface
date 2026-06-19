@@ -53,7 +53,7 @@ import vedo
 
 from sphere_curvature import compute_vertex_frames
 from membrane_stress_fd import (
-    analytic_axisym, report, show, _component_operator, solve_membrane as solve_gfdm,
+    analytic_axisym, report, _component_operator, solve_membrane as solve_gfdm,
 )
 
 
@@ -200,26 +200,74 @@ def solve_membrane_fem(mesh: vedo.Mesh, dp: float, t: float, depth: int = 3,
     resid_tik = np.linalg.norm(K @ s_tik - b) / bnorm
 
     N1t, N2t, s1t, s2t = _principal(s_tik, t)
+    # principal stress directions in world R^3: eigenvector of [[p,r],[r,q]] for the
+    # larger eigenvalue makes angle theta_s with t1; d1 <-> sigma1, d2 <-> sigma2.
+    p, q, r = s_tik[0::3], s_tik[1::3], s_tik[2::3]
+    theta_s = 0.5 * np.arctan2(2.0 * r, p - q)
+    d1 = np.cos(theta_s)[:, None] * t1 + np.sin(theta_s)[:, None] * t2
+    d1 /= np.linalg.norm(d1, axis=1, keepdims=True) + 1e-15
+    d2 = np.cross(n, d1)
     return dict(pts=pts, normals=n, radial=radial, faces=faces,
                 sigma1_raw=s1r, sigma2_raw=s2r, resid_raw=resid_raw,
-                sigma1=s1t, sigma2=s2t, N1=N1t, N2=N2t, resid=resid_tik)
+                sigma1=s1t, sigma2=s2t, N1=N1t, N2=N2t, d1=d1, d2=d2, resid=resid_tik)
 
 
-def show_interactive(meshes_fields, field="sigma_max"):
-    """Open an interactive vedo window: each mesh coloured by sigma_max (or sigma_min),
-    shared colour scale, independent cameras. Rotate/zoom; close the window to exit."""
-    def fval(r):
-        return (np.maximum(r["sigma1"], r["sigma2"]) if field == "sigma_max"
-                else np.minimum(r["sigma1"], r["sigma2"]))
-    alls = np.concatenate([fval(r) for _, r in meshes_fields])
+def stress_scalar(r, name):
+    """Scalar stress metric per vertex. von Mises is the default equivalent stress for a
+    membrane (plane-stress); mean = isotropic tension (sigma1+sigma2)/2; shear =
+    in-plane max shear (sigma1-sigma2)/2 = anisotropy magnitude."""
+    s1, s2 = r["sigma1"], r["sigma2"]
+    smax, smin = np.maximum(s1, s2), np.minimum(s1, s2)
+    return {
+        "vonmises": np.sqrt(s1 ** 2 - s1 * s2 + s2 ** 2),
+        "mean": (s1 + s2) / 2.0,
+        "shear": (smax - smin) / 2.0,
+        "sigma_max": smax,
+        "sigma_min": smin,
+    }[name]
+
+
+def cross_glyphs(r, n_glyph=180):
+    """Principal-stress crosses: at ~n_glyph vertices, two symmetric segments along +-d1
+    and +-d2 (stress is a line field), each arm scaled by |sigma_i| (so isotropic regions
+    look like a +, anisotropic ones elongate along the larger stress). Tensile arms red,
+    compressive arms blue."""
+    pts, d1, d2 = r["pts"], r["d1"], r["d2"]
+    s1, s2 = r["sigma1"], r["sigma2"]
+    diag = np.linalg.norm(pts.max(axis=0) - pts.min(axis=0))
+    base = diag * 0.06
+    sref = np.percentile(np.maximum(np.abs(s1), np.abs(s2)), 98) + 1e-12
+    idx = np.arange(len(pts))[:: max(1, len(pts) // n_glyph)]
+    objs = []
+    for d, s in ((d1, s1), (d2, s2)):
+        h = (base * np.clip(np.abs(s) / sref, 0.0, 1.0))[:, None]
+        P0, P1 = (pts - h * d)[idx], (pts + h * d)[idx]
+        si = s[idx]
+        for mask, col in ((si >= 0, "red"), (si < 0, "blue")):
+            if mask.any():
+                objs.append(vedo.Lines(P0[mask], P1[mask], c=col, lw=3, alpha=0.9))
+    return objs
+
+
+def plot_fem(panels, field="vonmises", out=None, show=False):
+    """Each mesh coloured by the chosen stress scalar (shared scale) with principal-stress
+    crosses overlaid. Saves to `out` and/or opens an interactive window."""
+    vals = [stress_scalar(r, field) for _, r in panels]
+    alls = np.concatenate(vals)
     clim = (float(np.percentile(alls, 2)), float(np.percentile(alls, 98)))
-    plt = vedo.Plotter(N=len(meshes_fields), size=(1700, 850), sharecam=False,
+    plt = vedo.Plotter(N=len(panels), size=(1700, 850), sharecam=False, offscreen=not show,
                        title="Membrane stress (stress-based FEM)")
-    for k, (m, r) in enumerate(meshes_fields):
-        m.pointdata[field] = fval(r)
-        m.cmap("plasma", field, vmin=clim[0], vmax=clim[1]).add_scalarbar(title=field)
-        plt.at(k).show(m, vedo.Text2D(r["title"], pos="top-left"), axes=1)
-    plt.interactive().close()
+    for k, ((m, r), v) in enumerate(zip(panels, vals)):
+        m.pointdata[field] = v
+        m.cmap("viridis", field, vmin=clim[0], vmax=clim[1]).add_scalarbar(title=f"{field} (Pa)")
+        plt.at(k).show(m, *cross_glyphs(r), vedo.Text2D(r["title"], pos="top-left"), axes=1)
+    if out:
+        os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+        plt.screenshot(out)
+        print(f"Saved {out}")
+    if show:
+        plt.interactive()
+    plt.close()
 
 
 def _dev_std(s1, s2, mask=None):
@@ -254,7 +302,10 @@ def main():
     ap.add_argument("--lam", type=float, default=0.05, help="Tikhonov weight")
     ap.add_argument("--stretch", type=float, default=2.0)
     ap.add_argument("--no-gfdm", action="store_true", help="skip the GFDM head-to-head")
-    ap.add_argument("--raw", action="store_true", help="plot the raw (unregularised) field")
+    ap.add_argument("--raw", action="store_true", help="colour by the raw (unregularised) field")
+    ap.add_argument("--field", default="vonmises",
+                    choices=["vonmises", "mean", "shear", "sigma_max", "sigma_min"],
+                    help="mesh colour metric (default von Mises)")
     ap.add_argument("--out", default="out/membrane_stress_fem.png")
     ap.add_argument("--show", action="store_true")
     args = ap.parse_args()
@@ -287,14 +338,11 @@ def main():
         ge = solve_gfdm(ell, args.dp, args.t, depth=args.depth, lam=args.lam)
         report(f"GFDM spheroid x{args.stretch}", ge, args.dp, args.t, a=args.stretch * R, b=R)
 
-    if args.raw:                      # display the unregularised field to see the lines
+    if args.raw:                      # colour by the unregularised field to see the lines
         fs["sigma1"], fs["sigma2"] = fs["sigma1_raw"], fs["sigma2_raw"]
         fe["sigma1"], fe["sigma2"] = fe["sigma1_raw"], fe["sigma2_raw"]
     panels = [(sphere, fs), (ell, fe)]
-    if args.show:
-        show_interactive(panels)
-    else:
-        show(panels, args.out)
+    plot_fem(panels, field=args.field, out=args.out, show=args.show)
 
 
 if __name__ == "__main__":

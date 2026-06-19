@@ -316,11 +316,19 @@ operators), where `w = λ·‖K‖_F/‖R‖_F` rescales the area-weighted `K` (
 the solve). Direct solve below 20k DOFs, iterative `lsqr` on `[K; wR]` above. Principal stresses
 `σ₁,σ₂ = eig([[p,r],[r,q]])/t`, same post-processing as GFDM.
 
+**Visualization.** The viewer colours each mesh by an equivalent-stress scalar (default
+**von Mises** `σ_vm = √(σ₁²−σ₁σ₂+σ₂²)`; also `--field mean|shear|sigma_max|sigma_min`, where
+mean `(σ₁+σ₂)/2` is the isotropic tension and shear `(σ₁−σ₂)/2` the anisotropy) and overlays a
+**principal-stress cross** at each sampled vertex: two symmetric segments along ±d₁ and ±d₂ (stress
+is a line field), each arm length ∝ `|σᵢ|` (so isotropic regions look like a `+`, anisotropic ones
+elongate along the larger stress), coloured red for tension and blue for compression.
+
 ```powershell
 # solve sphere + spheroid, FEM vs GFDM head-to-head + analytic -> out/membrane_stress_fem.png
-& $py membrane_stress_fem.py                     # flags: --subdiv --depth --dp --t --lam --stretch --no-gfdm --raw --show
-& $py membrane_stress_fem.py --show              # interactive 2-panel viewer (sphere + spheroid)
-& $py membrane_stress_fem.py --raw --show        # show the RAW min-norm field (the null-mode "lines")
+& $py membrane_stress_fem.py                     # flags: --subdiv --depth --dp --t --lam --stretch --no-gfdm --raw --field --show
+& $py membrane_stress_fem.py --show              # interactive 2-panel viewer: von Mises + principal-stress crosses
+& $py membrane_stress_fem.py --show --field shear   # colour by max-shear (anisotropy) instead
+& $py membrane_stress_fem.py --raw --show        # colour by the RAW min-norm field (the null-mode "lines")
 
 # reproduce the GFDM §10 validation battery for the FEM (convergence, linearity,
 # analytic benchmark sphere/spheroid/capsule, λ tradeoff) -> out/fem_validation.png
@@ -484,7 +492,7 @@ M1+M2 on **HH17 (decimated to HH20's 3766 pts) + HH20** for the real-mesh compar
 - `curvature_compare.py` — mean-curvature + normals; sphere vs stretched
 - `surface_fd.py` — GFDM surface-derivative operators (+ self-test)
 - `membrane_stress_fd.py` — direct GFDM membrane-stress solve (σ₁, σ₂); auto lsqr for large meshes
-- `membrane_stress_fem.py` — **stress-based FEM** (tension_inference §12): primal virtual-work (cMSM-style), P1 nodal local-frame DOFs, square 3n system, FEM-native 1-ring roughness, auto-iterative solve; raw vs Tikhonov, head-to-head with GFDM; `--show` for the interactive 2-panel viewer, `--raw` to see the lines. ~5–12× faster than GFDM and ≥ its accuracy
+- `membrane_stress_fem.py` — **stress-based FEM** (tension_inference §12): primal virtual-work (cMSM-style), P1 nodal local-frame DOFs, square 3n system, FEM-native 1-ring roughness, auto-iterative solve; returns σ₁/σ₂ + principal directions d₁/d₂; viewer colours by von Mises (`--field`) with **principal-stress crosses** (±d₁/±d₂, arms ∝|σᵢ|, red=tension/blue=compression); `--show` interactive, `--raw` to see the lines. ~5–12× faster than GFDM and ≥ its accuracy
 - `fem_validation.py` — **FEM validation suite** reproducing the GFDM §10 battery for `membrane_stress_fem`: convergence (subdiv 3–5, FEM vs GFDM), linearity (σ ∝ Δp/t), analytic benchmark (sphere/spheroid/capsule), λ tradeoff → `out/fem_validation.png` + printed tables
 - `stress_smoothing_compare.py` — Laplacian smoothing of σ; raw vs smoothed vs mean
 - `membrane_stress_beltrami.py` — Beltrami/Airy stress-function solve (single scalar Φ)

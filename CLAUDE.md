@@ -221,8 +221,11 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
 - `membrane_stress_fd.py` — direct GFDM membrane-stress solve (σ₁, σ₂); arbitrary fit frame.
 - `membrane_stress_fem.py` — **stress-based FEM** (§12): primal virtual-work, P1 nodal local-frame
   DOFs, square 3n system, FEM-native 1-ring roughness, auto-iterative; `assemble_fem`,
-  `fem_roughness_operator`, `solve_membrane_fem`, `show_interactive`. ~5–12× faster than GFDM,
-  ≥ accuracy; raw min-norm reproduces the lines (intrinsic). `--show`/`--raw`.
+  `fem_roughness_operator`, `solve_membrane_fem`, `plot_fem`/`cross_glyphs`/`stress_scalar`.
+  Returns σ₁/σ₂ + principal **directions d₁/d₂** (θ_s=½arctan2(2r,p−q) in the fit frame). Viewer
+  colours by **von Mises** (`--field vonmises|mean|shear|sigma_max|sigma_min`) + draws
+  **principal-stress crosses** (±d₁/±d₂ segments, arms ∝|σᵢ|, red=tension/blue=compression).
+  ~5–12× faster than GFDM, ≥ accuracy; raw min-norm reproduces the lines (intrinsic). `--show`/`--raw`.
 - `fem_validation.py` — reproduces the GFDM §10 battery for the FEM: convergence (subdiv 3–5,
   FEM vs GFDM), linearity (σ∝Δp/t), analytic benchmark (sphere/spheroid/capsule via `make_capsule`),
   λ tradeoff → `out/fem_validation.png` + tables. Reuses `one_ring_avg`/`laplacian_smooth` from
