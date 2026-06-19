@@ -198,6 +198,7 @@ def solve_membrane_fem(mesh: vedo.Mesh, dp: float, t: float, depth: int = 3,
         A = (K.T @ K + (w ** 2) * (R.T @ R)).tocsc()
         s_tik = spla.spsolve(A, K.T @ b)
     resid_tik = np.linalg.norm(K @ s_tik - b) / bnorm
+    reg_norm = float(np.linalg.norm(R @ s_tik))      # roughness ||R s|| (L-curve y-axis)
 
     N1t, N2t, s1t, s2t = _principal(s_tik, t)
     # principal stress directions in world R^3: eigenvector of [[p,r],[r,q]] for the
@@ -209,7 +210,8 @@ def solve_membrane_fem(mesh: vedo.Mesh, dp: float, t: float, depth: int = 3,
     d2 = np.cross(n, d1)
     return dict(pts=pts, normals=n, radial=radial, faces=faces,
                 sigma1_raw=s1r, sigma2_raw=s2r, resid_raw=resid_raw,
-                sigma1=s1t, sigma2=s2t, N1=N1t, N2=N2t, d1=d1, d2=d2, resid=resid_tik)
+                sigma1=s1t, sigma2=s2t, N1=N1t, N2=N2t, d1=d1, d2=d2,
+                resid=resid_tik, reg_norm=reg_norm)
 
 
 def stress_scalar(r, name):
