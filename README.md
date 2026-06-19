@@ -293,6 +293,54 @@ test, so high-curvature folds need curvature-**adaptive** refinement (a uniform 
 target is ~4e4 verts). **Timing** (sphere, depth-3): sd3 0.7s · sd4 7.6s · sd5 **267s**
 (direct) · sd6 532s (lsqr) — the direct normal-equation solve scales ~×35 per ×4 DOFs.
 
+### 10. Stress-based FEM — an alternative discretisation (§12 of `tension_inference`)
+
+`membrane_stress_fem.py` solves the **same** balance law `div_s N + Δp·n = 0` by a
+finite-element method instead of GFDM, as a cross-check (and to put cMSM's formulation on a
+*closed* surface).
+
+**Methodology.** Primal **virtual-work** weak form (dot the balance with a vector test field
+`w`, integrate by parts on the closed surface): `∫_Γ N : ε_s(w) dS = ∫_Γ Δp (n·w) dS` — internal
+virtual work = external virtual work of the pressure. Both fields are **continuous P1** in
+ambient Cartesian components: the stress trial carries 3 DOF/vertex `(p,q,r)` in the local frame
+(`N = p v1⊗v1 + q v2⊗v2 + r(v1⊗v2+v2⊗v1)`, tangential by build); the test is a P1 vector field.
+This gives a **square 3n×3n** system (the count of cMSM). Element block on a triangle `T`
+(area `A_T`, constant P1 hat gradient `g_j = n_T×opp_j/(2A_T)`):
+`a|_T(N, e_d φ_j) = (A_T/3) Σ_{m∈T} (N_m g_j)_d`; consistent load via the P1 mass matrix
+`M^T_jm = (A_T/12)(1+δ_jm)`. `K` is **singular** on a closed surface (self-equilibrating null
+modes), but the pressure load is consistent (net force/torque = 0). Two-stage solve:
+(i) **raw min-norm** `lsqr` (lines diagnostic); (ii) **Tikhonov** `‖Ks−b‖²+w²‖Rs‖²` with a
+**FEM-native 1-ring roughness** `R` (`∫|∇_s N|²` from the P1 element gradients — no GFDM
+operators), where `w = λ·‖K‖_F/‖R‖_F` rescales the area-weighted `K` (~h) against `R` (~O(1)) so
+`λ=0.05` means the same as in GFDM (without this rescale a bare λ mis-scales by ~h⁻⁴ and collapses
+the solve). Direct solve below 20k DOFs, iterative `lsqr` on `[K; wR]` above. Principal stresses
+`σ₁,σ₂ = eig([[p,r],[r,q]])/t`, same post-processing as GFDM.
+
+```powershell
+# solve sphere + spheroid, FEM vs GFDM head-to-head + analytic -> out/membrane_stress_fem.png
+& $py membrane_stress_fem.py                     # flags: --subdiv --depth --dp --t --lam --stretch --no-gfdm --raw --show
+& $py membrane_stress_fem.py --show              # interactive 2-panel viewer (sphere + spheroid)
+& $py membrane_stress_fem.py --raw --show        # show the RAW min-norm field (the null-mode "lines")
+
+# reproduce the GFDM §10 validation battery for the FEM (convergence, linearity,
+# analytic benchmark sphere/spheroid/capsule, λ tradeoff) -> out/fem_validation.png
+& $py fem_validation.py
+```
+
+**Key findings** (subdiv-4, Δp=20, t=0.05, vs GFDM):
+- **The "lines" are intrinsic, not a GFDM artefact.** The raw min-norm FEM — a completely
+  different discretisation — produces the same spurious deviatoric (dev-std **216** on a sphere
+  field that must be 0, growing from 73 at subdiv-3). So the closed-surface streaks come from the
+  static indeterminacy itself; equivalently cMSM is singular on a closed surface and relies on its
+  open-dome boundary.
+- **Regularised FEM ≥ GFDM accuracy:** sphere mean **0.3%** (GFDM 1.1%), dev-std **4.4** (GFDM 6.5);
+  spheroid σ_max **1.7%** (GFDM 3.6%); capsule cylinder hoop **0.15%** / axial 3.8%. Linearity:
+  `σ/(Δp/t)` constant to 4 decimals (sphere ratio 0.498 vs analytic 0.5). λ-tradeoff: FEM's σ_min
+  keeps improving with larger λ, so its optimum sits **higher** than GFDM's 0.05.
+- **~5–12× faster:** subdiv-4 **2.0 s** vs 10.3 s, subdiv-5 **9.2 s** vs 110 s. `KᵀK` is 6.6× sparser
+  than the depth-3 GFDM `LᵀL` (57 vs 376 nnz/row), with no per-vertex WLS operator to build →
+  the better engine for embryo-scale, curvature-adaptive meshes.
+
 ### 6. Final-results simulations (method comparison: Local vs cMSM vs FEM)
 
 The "final results" follow a 12-sim matrix: **2 geometries** (sphere, prolate ellipsoid 2:1)
@@ -437,6 +485,7 @@ M1+M2 on **HH17 (decimated to HH20's 3766 pts) + HH20** for the real-mesh compar
 - `surface_fd.py` — GFDM surface-derivative operators (+ self-test)
 - `membrane_stress_fd.py` — direct GFDM membrane-stress solve (σ₁, σ₂); auto lsqr for large meshes
 - `membrane_stress_fem.py` — **stress-based FEM** (tension_inference §12): primal virtual-work (cMSM-style), P1 nodal local-frame DOFs, square 3n system, FEM-native 1-ring roughness, auto-iterative solve; raw vs Tikhonov, head-to-head with GFDM; `--show` for the interactive 2-panel viewer, `--raw` to see the lines. ~5–12× faster than GFDM and ≥ its accuracy
+- `fem_validation.py` — **FEM validation suite** reproducing the GFDM §10 battery for `membrane_stress_fem`: convergence (subdiv 3–5, FEM vs GFDM), linearity (σ ∝ Δp/t), analytic benchmark (sphere/spheroid/capsule), λ tradeoff → `out/fem_validation.png` + printed tables
 - `stress_smoothing_compare.py` — Laplacian smoothing of σ; raw vs smoothed vs mean
 - `membrane_stress_beltrami.py` — Beltrami/Airy stress-function solve (single scalar Φ)
 - `reg_compare.py` — cMSM-style (grad-trace + curl) regularization vs our Laplacian smoothing

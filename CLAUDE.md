@@ -223,6 +223,10 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
   DOFs, square 3n system, FEM-native 1-ring roughness, auto-iterative; `assemble_fem`,
   `fem_roughness_operator`, `solve_membrane_fem`, `show_interactive`. ~5–12× faster than GFDM,
   ≥ accuracy; raw min-norm reproduces the lines (intrinsic). `--show`/`--raw`.
+- `fem_validation.py` — reproduces the GFDM §10 battery for the FEM: convergence (subdiv 3–5,
+  FEM vs GFDM), linearity (σ∝Δp/t), analytic benchmark (sphere/spheroid/capsule via `make_capsule`),
+  λ tradeoff → `out/fem_validation.png` + tables. Reuses `one_ring_avg`/`laplacian_smooth` from
+  `convergence_study`, `analytic_axisym` from `membrane_stress_fd`, `make_capsule` from `show_capsule`.
 - `membrane_stress_fd_v2.py` — same solve in the **principal curvature frame** (e1, e2 from
   `compute_curvature_frame`); adds `d1`, `d2` (principal stress directions, world R³), `r`
   shear diagnostic, and per-vertex `resid_pv`; includes `make_capsule` and `plot_stress_frame`
