@@ -329,8 +329,8 @@ the solve). Direct solve below 20k DOFs, iterative `lsqr` on `[K; wR]` above. Pr
 
 **Key findings** (subdiv-4, Δp=20, t=0.05, vs GFDM):
 - **The "lines" are intrinsic, not a GFDM artefact.** The raw min-norm FEM — a completely
-  different discretisation — produces the same spurious deviatoric (dev-std **216** on a sphere
-  field that must be 0, growing from 73 at subdiv-3). So the closed-surface streaks come from the
+  different discretisation — produces the same spurious deviatoric (dev-std 73 at subdiv-3, 216 at
+  subdiv-4 on a sphere field that must be 0 — far above the regularised ~3–5). So the closed-surface streaks come from the
   static indeterminacy itself; equivalently cMSM is singular on a closed surface and relies on its
   open-dome boundary.
 - **Regularised FEM ≥ GFDM accuracy:** sphere mean **0.3%** (GFDM 1.1%), dev-std **4.4** (GFDM 6.5);

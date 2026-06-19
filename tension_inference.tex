@@ -1886,8 +1886,10 @@ GFDM (Tikhonov)    & $202.1$ ($1.1\%$) & $6.5$  & $3.6\%$  & $22.8\%$  \\
 \paragraph{The lines are intrinsic, not a stencil artefact.}  The raw min-norm
 FEM --- a completely different discretisation (Galerkin element integration rather
 than local WLS collocation) --- produces a spurious deviatoric of the same
-character as the raw GFDM solve (dev-std $216$ on a field that must be $0$, growing
-from $73$ at subdiv-3 as the near-null singular values shrink).  This confirms that
+character as the raw GFDM solve (dev-std $73$ at subdiv-3 and $216$ at subdiv-4 on
+a field that must be $0$ --- far above the regularised $3$--$5$; the raw amplitude
+tracks the near-null spectrum and the minimum-norm solve, so it is mesh-dependent
+rather than monotone).  This confirms that
 the closed-surface streaks come from the static indeterminacy itself
 (Section~\ref{sec:null-modes}), not from the GFDM stencils; equivalently, cMSM's
 formulation is singular on a closed surface and relies on its open-dome boundary to
