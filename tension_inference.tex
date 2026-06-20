@@ -2117,26 +2117,47 @@ $m\in\{0,4,8,12,16\}$, smoothing the \emph{DOF} fields $(p,q,r)$ and recomputing
 residual and roughness on the smoothed solution so that both respond to $m$ as they
 do to $\lambda$ (\texttt{fem\_smoothing\_sweep.py}).  Errors are measured against the
 analytic field over the same equatorial belt / cylinder body as before.
-Figure~\ref{fig:femsmooth} shows the four shapes; Table~\ref{tab:femsmooth} reports
-the optimum.
+Figures~\ref{fig:femsmooth-sphere}--\ref{fig:femsmooth-capsule} show the four shapes;
+Table~\ref{tab:femsmooth} reports the optimum.  In every panel set the layout mirrors
+cMSM Supplementary Fig.~15 --- (a) relative error vs $\lambda$, (b)
+$\sigma_1=\sigma_{\max}$ vs latitude/axial coordinate at the best $\lambda$ with the
+analytic solution overlaid, (c) force-balance residual vs $\lambda$, (d) the L-curve
+--- and colour encodes the smoothing iteration count (dark ${=}\,0$, light ${=}\,16$).
 
-\begin{figure}[ht]\centering
-  \includegraphics[width=0.49\textwidth]{out/fem_smoothing_sweep_sphere.png}\hfill
-  \includegraphics[width=0.49\textwidth]{out/fem_smoothing_sweep_prolate.png}\\[2pt]
-  \includegraphics[width=0.49\textwidth]{out/fem_smoothing_sweep_oblate.png}\hfill
-  \includegraphics[width=0.49\textwidth]{out/fem_smoothing_sweep_capsule.png}
-  \caption{Joint $\lambda\times$Laplacian-iters sweep of the stress FEM (subdiv-4,
-  $\Delta p=20$\,Pa, $t=0.05$, $\alpha=0.5$) on the sphere (top left), prolate
-  spheroid $2{:}1$ (top right), oblate spheroid $1{:}2$ (bottom left) and capsule
-  (bottom right).  Each panel set mirrors cMSM Supplementary Fig.~15: (a) relative
-  error vs $\lambda$, (b) $\sigma_1=\sigma_{\max}$ vs latitude/axial coordinate at the
-  best $\lambda$ with the analytic solution overlaid, (c) force-balance residual vs
-  $\lambda$, (d) the L-curve.  Colour encodes the smoothing iteration count (dark
-  ${=}\,0$, light ${=}\,16$).  On the three shapes with genuine stress variation the
-  $m{=}0$ (Tikhonov-only) curve attains the lowest error and lowest residual; only on
-  the sphere does smoothing reduce the error, because there is no real signal to
-  flatten.}
-  \label{fig:femsmooth}
+\begin{figure}[p]\centering
+  \includegraphics[width=\textwidth]{out/fem_smoothing_sweep_sphere.png}
+  \caption{\textbf{Sphere.}  Joint $\lambda\times$Laplacian-iters sweep of the stress
+  FEM (subdiv-4, $\Delta p=20$\,Pa, $t=0.05$, $\alpha=0.5$).  The sphere is the lone
+  shape on which smoothing helps ($3.45\%\!\to\!1.29\%$): its exact field is constant
+  isotropic, so there is no genuine signal for the Laplacian to flatten and more
+  iterations monotonically reduce the spurious anisotropy in panel~(b).}
+  \label{fig:femsmooth-sphere}
+\end{figure}
+
+\begin{figure}[p]\centering
+  \includegraphics[width=\textwidth]{out/fem_smoothing_sweep_prolate.png}
+  \caption{\textbf{Prolate spheroid $2{:}1$.}  The Tikhonov-only curve ($m{=}0$, dark)
+  attains both the lowest error ($2.47\%$) and the lowest residual; every smoothing
+  pass flattens the genuine meridional/hoop variation visible in panel~(b) and raises
+  the residual in panel~(c).}
+  \label{fig:femsmooth-prolate}
+\end{figure}
+
+\begin{figure}[p]\centering
+  \includegraphics[width=\textwidth]{out/fem_smoothing_sweep_oblate.png}
+  \caption{\textbf{Oblate spheroid $1{:}2$.}  As for the prolate case the optimum is
+  at $m{=}0$ ($6.72\%$); the larger floor reflects the stronger curvature gradients of
+  the oblate shape, not the regularizer.}
+  \label{fig:femsmooth-oblate}
+\end{figure}
+
+\begin{figure}[p]\centering
+  \includegraphics[width=\textwidth]{out/fem_smoothing_sweep_capsule.png}
+  \caption{\textbf{Capsule} (cylinder $R{=}1$, half-height $H{=}2$, hemispherical
+  caps).  Panel~(b) shows the hoop/axial step --- $\sigma_{\max}\!\approx\!\Delta pR/t$
+  on the cylinder body, $\Delta pR/2t$ on the caps --- which the $m{=}0$ solution
+  ($2.19\%$) tracks most faithfully; smoothing rounds off the step.}
+  \label{fig:femsmooth-capsule}
 \end{figure}
 
 \begin{table}[ht]\centering
