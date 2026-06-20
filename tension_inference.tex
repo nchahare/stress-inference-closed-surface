@@ -2090,10 +2090,85 @@ divergence      & excluded (it is the physics)& lightly included \\
 weight scaling  & $\lambda_t$ carries a length& dimensionless ($\|K\|_F/\|R\|_F$) \\
 $\det\sigma>0$  & enforced (\texttt{fmincon}, nonlinear) & not enforced (linear; $\sigma_{\min}<0$ kept) \\
 $\lambda$ choice& L-curve corner              & L-curve corner \\
-null-mode cure  & open-boundary pinning       & higher $\lambda$ $+$ Laplacian post-smoothing \\
+null-mode cure  & open-boundary pinning       & single Tikhonov $\lambda$ (\S\ref{sec:fem-smoothing}) \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+%% -------------------------------------------------------------------------
+\subsection{Is Laplacian post-smoothing worth a second knob? A $\lambda\times$iters study}
+\label{sec:fem-smoothing}
+
+The GFDM pipeline removed the residual low-frequency streaks with a Laplacian
+(umbrella) post-smoothing pass,
+$\sigma\leftarrow(1-\alpha)\sigma+\alpha\,\bar\sigma_{1\text{-ring}}$
+(Section~\ref{sec:tikhonov}).  Applied to the FEM solution this is a \emph{second}
+regularization knob that overlaps with the Tikhonov weight $\lambda$ --- both are
+low-pass filters of the same null modes.  Its two parameters (blend $\alpha$,
+iteration count) collapse to a single effective smoothing scale: one pass is the
+linear operator $M=(1-\alpha)I+\alpha A$ with $A$ the row-normalised 1-ring average,
+and after $m$ passes a mode of adjacency eigenvalue $\mu$ decays like
+$[(1-\alpha)+\alpha\mu]^m\approx e^{-m\alpha(1-\mu)}$, so only the product $m\alpha$
+matters.  We therefore fix $\alpha=0.5$ and sweep the iteration count $m$.
+
+To decide whether this second knob earns its place we ran, for each shape, a joint
+sweep of $\lambda$ (the same $10^{-4}$ to $50$ as above) and
+$m\in\{0,4,8,12,16\}$, smoothing the \emph{DOF} fields $(p,q,r)$ and recomputing the
+residual and roughness on the smoothed solution so that both respond to $m$ as they
+do to $\lambda$ (\texttt{fem\_smoothing\_sweep.py}).  Errors are measured against the
+analytic field over the same equatorial belt / cylinder body as before.
+Figure~\ref{fig:femsmooth} shows the four shapes; Table~\ref{tab:femsmooth} reports
+the optimum.
+
+\begin{figure}[ht]\centering
+  \includegraphics[width=0.49\textwidth]{out/fem_smoothing_sweep_sphere.png}\hfill
+  \includegraphics[width=0.49\textwidth]{out/fem_smoothing_sweep_prolate.png}\\[2pt]
+  \includegraphics[width=0.49\textwidth]{out/fem_smoothing_sweep_oblate.png}\hfill
+  \includegraphics[width=0.49\textwidth]{out/fem_smoothing_sweep_capsule.png}
+  \caption{Joint $\lambda\times$Laplacian-iters sweep of the stress FEM (subdiv-4,
+  $\Delta p=20$\,Pa, $t=0.05$, $\alpha=0.5$) on the sphere (top left), prolate
+  spheroid $2{:}1$ (top right), oblate spheroid $1{:}2$ (bottom left) and capsule
+  (bottom right).  Each panel set mirrors cMSM Supplementary Fig.~15: (a) relative
+  error vs $\lambda$, (b) $\sigma_1=\sigma_{\max}$ vs latitude/axial coordinate at the
+  best $\lambda$ with the analytic solution overlaid, (c) force-balance residual vs
+  $\lambda$, (d) the L-curve.  Colour encodes the smoothing iteration count (dark
+  ${=}\,0$, light ${=}\,16$).  On the three shapes with genuine stress variation the
+  $m{=}0$ (Tikhonov-only) curve attains the lowest error and lowest residual; only on
+  the sphere does smoothing reduce the error, because there is no real signal to
+  flatten.}
+  \label{fig:femsmooth}
+\end{figure}
+
+\begin{table}[ht]\centering
+\caption{Best relative error over the joint $\lambda\times m$ grid versus the best at
+$m=0$ (Tikhonov only).  ``gain'' is the relative error reduction the Laplacian buys.}
+\label{tab:femsmooth}
+\begin{tabular}{lrrrr}
+\toprule
+shape & $\lambda^\star$ & iters$^\star$ & error$^\star$ & error$(m{=}0)$ \\
+\midrule
+sphere            & $0.26$  & $16$ & $1.29\%$ & $3.45\%$ \\
+prolate $2{:}1$   & $0.26$  & $0$  & $2.47\%$ & $2.47\%$ \\
+oblate $1{:}2$    & $0.11$  & $0$  & $6.72\%$ & $6.72\%$ \\
+capsule           & $0.046$ & $0$  & $2.19\%$ & $2.19\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Conclusion: one knob, not two.}  On every surface that carries a
+\emph{genuine} stress field --- the prolate and oblate spheroids and the capsule ---
+the optimum is at zero smoothing iterations: Laplacian post-smoothing cannot lower the
+error below what the Tikhonov weight already achieves, because any pass that
+suppresses the spurious anisotropy also flattens the real meridional/hoop variation at
+the same wavelength, and it always \emph{raises} the equilibrium residual (panel~c).
+The sphere is the lone exception, and a misleading one: its exact field is constant
+isotropic, so there is no true signal for smoothing to damage and more iterations
+monotonically help --- the same degeneracy that makes the sphere a poor $\lambda$
+calibration target (Section~\ref{sec:fem-reg}).  We therefore regularize the FEM with
+a \emph{single} principled knob --- the Tikhonov weight $\lambda$, selected at the
+L-curve corner --- and \emph{drop} the Laplacian post-smoothing inherited from the
+GFDM pipeline.  This both simplifies the method and removes a parameter that, away
+from the sphere, only trades equilibrium for cosmetic smoothness.
 
 %% =========================================================================
 \begin{thebibliography}{Mar\'in-Llaurad\'o et al. (2023)}

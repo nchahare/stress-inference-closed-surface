@@ -173,6 +173,19 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
   min-error ≈ 0.05, per `fem_regularization_study.py`). So the L-curve machinery works; just don't
   calibrate it on the sphere. Note: our R (FEM-native 1-ring covariant-gradient norm) is a single
   combined penalty, analogous to cMSM's λ_t+λ_c — we don't split grad-trace vs curl.
+- **Laplacian post-smoothing DROPPED for the FEM — one knob (Tikhonov λ), not two
+  (`fem_smoothing_sweep.py`, tension_inference §12 `sec:fem-smoothing`).** Joint λ×iters sweep
+  (α=0.5, m∈{0,4,8,12,16}, smoothing the DOFs and recomputing resid/roughness) on 4 shapes →
+  `out/fem_smoothing_sweep_{sphere,prolate,oblate,capsule}.png` + per-vertex NPZ. **Result: on
+  every shape with GENUINE stress variation (prolate err 2.47%, oblate 6.72%, capsule 2.19%) the
+  optimum is m=0** — Laplacian can't beat Tikhonov-λ because any pass that kills the spurious
+  anisotropy also flattens the real meridional/hoop signal at the same wavelength, and it always
+  RAISES the residual (panel c). **Only the SPHERE benefits** (3.45%→1.29% at m=16) — its constant
+  isotropic field has no real signal to damage (same degeneracy as the λ-calibration caveat). ⇒
+  regularize the FEM with the single Tikhonov λ at the L-curve corner; the Laplacian was a GFDM-era
+  patch. (α,iters collapse to one scale m·α since one pass = M=(1−α)I+αA, mode decay ~e^{−mα(1−μ)}.)
+  Each figure = cMSM-Fig-15 layout (a err/λ, b σ₁ vs latitude+analytic, c resid/λ, d L-curve),
+  colored by iters.
 - **Mesh resolution requirement (embryo) — `mesh_resolution_study.py`, tension_inference §10.7.**
   The controlling variable is the dimensionless **`h·κ`** (mesh spacing × curvature = 1/elements-
   per-curvature-radius). Error vs `h·κ`: sphere needs `h·κ≲0.05` (~20 elem/radius) for ~3%;
@@ -263,6 +276,12 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
 - `fem_regularization_study.py` — cMSM-Fig-15-style λ-sweep on the prolate **spheroid** (the case
   with genuine anisotropy → a real optimum exists ≈0.05): error(trace vs full σ)/residual/L-curve +
   3D trace(σ) glyph with inferred-vs-analytic crosses → `out/fem_regularization.png`.
+- `fem_smoothing_sweep.py` — joint **λ × Laplacian-iters** sweep on 4 shapes (sphere, prolate,
+  oblate, capsule); cMSM-Fig-15 layout per shape, curves colored by iters; smooths the DOFs and
+  recomputes resid/roughness so both respond to iters. → `out/fem_smoothing_sweep_<shape>.png` +
+  per-vertex `.npz` (sigma1/2, pqr DOFs, frames, faces, coord, mask, metrics — for later 3D plots).
+  Conclusion: m=0 optimal except on the sphere ⇒ FEM drops Laplacian. Flags: `--shapes --subdiv
+  --nlam --iters`.
 - `membrane_stress_fd_v2.py` — same solve in the **principal curvature frame** (e1, e2 from
   `compute_curvature_frame`); adds `d1`, `d2` (principal stress directions, world R³), `r`
   shear diagnostic, and per-vertex `resid_pv`; includes `make_capsule` and `plot_stress_frame`
