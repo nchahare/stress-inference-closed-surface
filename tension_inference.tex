@@ -1973,6 +1973,128 @@ Second, panel~(d) shows a clear knee that coincides with the onset of the residu
 rise in panel~(c); this is the regularization-selection rule for experimental data,
 where the analytic error of panel~(a) is unavailable.
 
+%% -------------------------------------------------------------------------
+\subsection{How our regularization differs from cMSM's}
+\label{sec:fem-reg-vs-cmsm}
+
+The reference method (Mar\'in-Llaurad\'o et al., 2023, Supplementary Note~2.3.1) and
+ours both regularize the same statically-indeterminate balance, but the choice of
+penalty differs in what it smooths, how many parameters it carries, and which
+physical constraints it enforces.  Because cMSM is the method we adapt, it is worth
+making the difference explicit.
+
+\paragraph{The cMSM penalty.}  cMSM minimise
+$E(\vv u)=\tfrac12\|A\vv u-\vv b\|^2+L(\vv u)$ where $\vv u$ collects the nodal
+stress components.  They first dismiss the zeroth-order (magnitude) Tikhonov term
+\begin{equation}
+  L_0(\sigma)=\frac{\lambda_0^2}{2}\int_\Gamma \sigma:\sigma\,dS,
+  \label{eq:cmsm-L0}
+\end{equation}
+because penalising the \emph{magnitude} of the tension produces solutions with sharp
+gradients.  They instead use \emph{two first-order} terms.  The first penalises
+gradients of the mean (hydrostatic) tension,
+\begin{equation}
+  L_{1t}(\sigma)=\frac{\lambda_t^2}{2}\int_\Gamma
+  \nabla\,\mathrm{trace}(\sigma)\cdot\nabla\,\mathrm{trace}(\sigma)\,dS,
+  \label{eq:cmsm-L1t}
+\end{equation}
+and the second penalises the \emph{curl} (swirl) of the tension field, which
+$L_{1t}$ alone leaves unconstrained,
+\begin{equation}
+  L_{1c}(\sigma)=\frac{\lambda_c^2}{2}\int_\Gamma
+  \mathrm{curl}\,\sigma:\mathrm{curl}\,\sigma\,dS,
+  \label{eq:cmsm-L1c}
+\end{equation}
+giving the combined quadratic penalty
+$L(\vv u)=\tfrac12\vv u^\top(\lambda_t^2 Q_t+\lambda_c^2 Q_c)\vv u$ with two
+independent weights $\lambda_t,\lambda_c$.  For experimental data they further impose
+the \emph{inequality constraint}
+\begin{equation}
+  \det\sigma_J=\sigma^{11}_J\sigma^{22}_J-(\sigma^{12}_J)^2>0
+  \quad\text{at every node }J,
+  \label{eq:cmsm-detpos}
+\end{equation}
+which forbids the negative principal tensions that flat or concave ($K\le0$) patches
+cannot physically sustain; this turns the minimisation nonlinear and is solved with a
+constrained optimiser (\texttt{fmincon}).
+
+\paragraph{Our penalty.}  We use a \emph{single} first-order term: the squared surface
+gradient of \emph{all} ambient stress components,
+\begin{equation}
+  \|R\vv s\|^2=\int_\Gamma\sum_{ab}\bigl|\nabla_s N_{ab}\bigr|^2\,dS,
+  \label{eq:our-rough}
+\end{equation}
+weighted by the single dimensionless $\lambda$ through $w=\lambda\,\|K\|_F/\|R\|_F$
+(Section~\ref{sec:fem-solve}), and we solve the resulting \emph{linear} normal
+equations $(K^\top K+w^2R^\top R)\vv s=K^\top\vv b$ with no inequality constraint.
+
+\paragraph{The conceptual difference.}  The full-gradient norm~\eqref{eq:our-rough}
+couples every first-order differential invariant of the symmetric tensor field --- its
+\emph{divergence}, its \emph{trace gradient}, and its \emph{curl} --- in one quadratic
+form, whereas cMSM \emph{isolate} the trace gradient~\eqref{eq:cmsm-L1t} and the
+curl~\eqref{eq:cmsm-L1c} and weight them independently while \emph{excluding} the
+divergence.  Their exclusion of the divergence is deliberate: the surface divergence
+of $\NN$ \emph{is} the physics (it equals the pressure load through
+equilibrium~\eqref{eq:equil}), so it belongs in the data term $\|A\vv u-\vv b\|^2$, not
+in the smoother.  Our single norm therefore also lightly penalises the divergence;
+because $K$ already drives the divergence toward the pressure, the overlap is mild, but
+it is the reason our optimal $\lambda$ sits higher and our trace error is the
+flattest-responding quantity (the trace gradient is the most heavily-penalised
+sub-mode).  The two-parameter cMSM form is the more surgical instrument --- in
+particular their $\lambda_c$ removes short-wavelength swirl that a pure trace penalty
+misses --- at the cost of a second weight to calibrate.
+
+\paragraph{Why it matters less than the boundary.}  We ported cMSM's exact
+$\lambda_t+\lambda_c$ penalty into our closed-surface solve (the covariant derivative
+needs no Christoffel symbols in ambient components,
+$\nabla_\alpha N_{\beta\gamma}=(v_\beta)_a(v_\gamma)_b\,(G_\alpha N)_{ab}$).  On the
+closed sphere and spheroid it performs no better than a plain first-order Tikhonov: a
+$\lambda_t/\lambda_c$ sweep plateaus the spurious anisotropy at ${\sim}10\%$ and the
+sphere deviatoric is essentially unimproved.  The reason is structural.  cMSM regularize
+an \emph{open} dome with a pinned basal boundary and a global conformal
+parametrisation: the boundary pins the divergence-free null space
+(Section~\ref{sec:null-modes}), so the regularizer only has to tidy residual gradients
+and swirl.  A closed surface has no such boundary; its null mode tracks the
+low-wavenumber mesh (icosahedral) pattern, which \emph{no} gradient penalty can remove
+without flattening the genuine signal at the same wavelength.  Hence on closed surfaces
+the \emph{form} of the first-order penalty (one combined norm vs.\ split
+trace$+$curl) is secondary --- what is load-bearing is the open-boundary pinning that
+closed surfaces lack, which is exactly why the regularised solve must be paired with a
+mild Laplacian post-smoothing or run at the higher $\lambda$ of
+Figure~\ref{fig:femreg}.
+
+\paragraph{Compressive tensions: constraint vs.\ signal.}  A final difference of intent
+concerns~\eqref{eq:cmsm-detpos}.  cMSM treat $\det\sigma\le0$ (a negative principal
+tension) as an artefact to be projected away, appropriate for the passive dome shapes
+they analyse.  We deliberately do \emph{not} impose it: on the neural tube a genuinely
+compressive $\sigma_{\min}<0$ is one of the two equilibrium-derived signatures of
+\emph{active} tension we wish to detect (Section~\ref{sec:nt-signatures}).
+Enforcing positive-definiteness would suppress exactly the quantity of biological
+interest, so we keep the solve linear and read $\sigma_{\min}<0$ as data, flagging
+low-confidence high-$h\kappa$ regions separately (Section~\ref{sec:resolution-requirement})
+rather than constraining them.
+
+\begin{table}[ht]\centering
+\caption{Regularization in cMSM (Mar\'in-Llaurad\'o et al., 2023) versus this work.}
+\label{tab:reg-compare}
+\begin{tabular}{lll}
+\toprule
+ & cMSM (paper) & this work (FEM) \\
+\midrule
+domain          & open dome, pinned edge      & closed / arbitrary surface \\
+parametrisation & global (conformal disc map) & per-vertex local frames \\
+penalty order   & first-order                 & first-order \\
+penalised modes & trace gradient $+$ curl     & full gradient $\sum_{ab}|\nabla_s N_{ab}|^2$ \\
+divergence      & excluded (it is the physics)& lightly included \\
+\# weights      & two ($\lambda_t,\lambda_c$) & one ($\lambda$) \\
+weight scaling  & $\lambda_t$ carries a length& dimensionless ($\|K\|_F/\|R\|_F$) \\
+$\det\sigma>0$  & enforced (\texttt{fmincon}, nonlinear) & not enforced (linear; $\sigma_{\min}<0$ kept) \\
+$\lambda$ choice& L-curve corner              & L-curve corner \\
+null-mode cure  & open-boundary pinning       & higher $\lambda$ $+$ Laplacian post-smoothing \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 %% =========================================================================
 \begin{thebibliography}{Mar\'in-Llaurad\'o et al. (2023)}
 
