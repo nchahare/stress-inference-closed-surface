@@ -329,6 +329,7 @@ length ∝ principal tension, divergence/convergence = sign).
 ```powershell
 # solve sphere + spheroid, FEM vs GFDM head-to-head + analytic -> out/membrane_stress_fem.png
 & $py membrane_stress_fem.py                     # flags: --subdiv --depth --dp --t --lam --stretch --no-gfdm --raw --field --show
+& $py membrane_stress_fem.py --lam auto          # pick λ automatically at the L-curve corner (printed + in title)
 & $py membrane_stress_fem.py --show              # interactive 2-panel viewer: von Mises + principal-stress crosses
 & $py membrane_stress_fem.py --show --field shear   # colour by max-shear (anisotropy) instead
 & $py membrane_stress_fem.py --raw --show        # colour by the RAW min-norm field (the null-mode "lines")
@@ -354,6 +355,12 @@ length ∝ principal tension, divergence/convergence = sign).
 - **Optimal λ ≈ 0.3** on the closed prolate spheroid (L-curve corner = min-error = onset of
   residual rise); calibrate on the spheroid, not the sphere (on a sphere the true field is
   constant isotropic so more smoothing always helps and no real optimum exists).
+- **Automatic λ per mesh** via `--lam auto` / `solve_membrane_fem(..., lam="auto")`: runs a one-off
+  λ-sweep and picks the residual-onset elbow of the L-curve (cMSM's rule, no ground truth needed).
+  The chosen λ is returned as `res["lam"]`, printed in the report, and shown in the viewer title;
+  the full sweep is in `res["lcurve"]`. λ is dimensionless (Frobenius-matched) → refinement-invariant
+  for a fixed shape, so only re-select for a new geometry. The selector is intentionally conservative
+  (low residual, sharp σ_max); override with an explicit `--lam` if you want more smoothing.
 
 ### 11. Regularization & the cMSM L-curve (do we reproduce their Fig. 15?)
 

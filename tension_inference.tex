@@ -1973,6 +1973,21 @@ Second, panel~(d) shows a clear knee that coincides with the onset of the residu
 rise in panel~(c); this is the regularization-selection rule for experimental data,
 where the analytic error of panel~(a) is unavailable.
 
+\paragraph{Automatic selection per mesh.}  Because $\lambda$ is dimensionless
+(Frobenius-matched, Section~\ref{sec:fem-solve}) it is invariant under refinement of a
+fixed geometry, but it does depend on the curvature distribution, so a genuinely new
+shape warrants its own choice.  This is automated by \texttt{solve\_membrane\_fem(...,
+lam="auto")}: the solver runs a one-off $\lambda$ sweep, measures the residual
+$\|K\vv s-\vv b\|/\|\vv b\|$ at each, and returns the value at the \emph{onset of the
+residual rise} --- the elbow (maximum distance from the endpoint chord) of the
+$(\log\lambda,\log\mathrm{residual})$ curve, which is cMSM's panel-(c) rule and needs
+no ground truth.  On the closed surfaces here this selector is deliberately
+\emph{conservative}: the residual lifts off before the full-$\sigma$ error reaches its
+minimum, so the automatic $\lambda$ ($\sim\!10^{-2}$) sits below the error-optimal
+$\sim\!10^{-1}$, favouring equilibrium fidelity (a low residual and a sharp
+$\sigma_{\max}$) at the cost of a noisier $\sigma_{\min}$.  The chosen value and the
+full sweep are returned (and reported) so it can be inspected or overridden.
+
 %% -------------------------------------------------------------------------
 \subsection{How our regularization differs from cMSM's}
 \label{sec:fem-reg-vs-cmsm}

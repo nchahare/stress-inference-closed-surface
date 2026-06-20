@@ -159,11 +159,63 @@ def _principal(s, t):
     return N1, N2, N1 / t, N2 / t
 
 
+def _solve_tikhonov(K, b, R, w, use_lsqr, lsqr_iters):
+    """One Tikhonov solve at roughness weight w; returns the DOF vector s."""
+    if use_lsqr:
+        Aug = sp.vstack([K, w * R]).tocsr()
+        baug = np.concatenate([b, np.zeros(R.shape[0])])
+        return spla.lsqr(Aug, baug, atol=1e-8, btol=1e-8, iter_lim=lsqr_iters)[0]
+    A = (K.T @ K + (w ** 2) * (R.T @ R)).tocsc()
+    return spla.spsolve(A, K.T @ b)
+
+
+def _elbow(x, y):
+    """Index of the maximum-distance-from-chord ("elbow") of the curve (x, y), each first
+    normalised to [0,1]: the point farthest from the straight line joining the endpoints.
+    Robust on a coarse sweep (unlike pointwise Menger curvature, which spikes on a steep branch)."""
+    x = (x - x.min()) / (np.ptp(x) + 1e-30)
+    y = (y - y.min()) / (np.ptp(y) + 1e-30)
+    p0 = np.array([x[0], y[0]]); pN = np.array([x[-1], y[-1]])
+    d = pN - p0
+    dn = np.hypot(*d) + 1e-30
+    pts = np.column_stack([x, y]) - p0
+    dist = np.abs(pts[:, 0] * d[1] - pts[:, 1] * d[0]) / dn
+    return int(np.argmax(dist))
+
+
+def _lcurve_corner(lams, resid, reg):
+    """Index of the regularization corner = onset of residual increase, i.e. the elbow of the
+    (log lambda, log residual) curve. This is cMSM's operational rule ("the lambda after which
+    the residual starts increasing", their Supp. Fig. 15c) and tracks the error optimum more
+    faithfully than the geometric corner of the (resid, reg) L-curve, which on these closed
+    surfaces sits too low (at the foot of the steep roughness drop)."""
+    return _elbow(np.log10(np.maximum(lams, 1e-300)), np.log10(np.maximum(resid, 1e-300)))
+
+
+def select_lambda_lcurve(K, b, R, kfac, lams, use_lsqr, lsqr_iters):
+    """Pick lambda at the L-curve corner. Sweeps `lams`, solves Tikhonov at each, and returns
+    (lam_opt, info) with the swept lams/residuals/roughnesses. Needs NO ground truth, so it is
+    the operational selector for real meshes (mirrors cMSM's L-curve choice)."""
+    bnorm = np.linalg.norm(b)
+    resids = np.empty(len(lams)); regs = np.empty(len(lams))
+    for i, lam in enumerate(lams):
+        s = _solve_tikhonov(K, b, R, lam * kfac, use_lsqr, lsqr_iters)
+        resids[i] = np.linalg.norm(K @ s - b) / bnorm
+        regs[i] = float(np.linalg.norm(R @ s))
+    idx = _lcurve_corner(np.asarray(lams, float), resids, regs)
+    return float(lams[idx]), dict(lams=np.asarray(lams, float), resid=resids, reg=regs, idx=int(idx))
+
+
 def solve_membrane_fem(mesh: vedo.Mesh, dp: float, t: float, depth: int = 3,
-                       lam: float = 0.05, raw: bool = True, solver: str = "auto",
-                       lsqr_thresh: int = 20000, lsqr_iters: int = 5000):
+                       lam=0.05, raw: bool = True, solver: str = "auto",
+                       lsqr_thresh: int = 20000, lsqr_iters: int = 5000, lam_sweep=None):
     """Primal virtual-work stress FEM. Returns the Tikhonov-regularised principal stresses
     (and, if raw=True, the raw minimum-norm field for the lines diagnostic).
+
+    lam: Tikhonov weight (dimensionless, Frobenius-matched). Pass a float, or "auto" to pick
+    lam at the L-curve corner of a one-off sweep (`lam_sweep`, default geomspace(1e-3,10,13)) --
+    no ground truth needed, the selector to use per real mesh. The chosen value is returned as
+    result["lam"] and the sweep as result["lcurve"].
 
     solver: "direct" forms the normal equations (K^T K + w^2 R^T R) and factors with sparse
     LU; "lsqr" runs iterative least squares on the augmented system [K; w R]; "auto" switches
@@ -187,16 +239,21 @@ def solve_membrane_fem(mesh: vedo.Mesh, dp: float, t: float, depth: int = 3,
     # weight by matching R to K's Frobenius norm (K is area-weighted ~h, R ~O(1)); without this
     # a raw lam mis-scales by ~1/h^4 and collapses the solution.
     R = fem_roughness_operator(pts, faces, t1, t2)
-    w = lam * np.linalg.norm(K.data) / np.linalg.norm(R.data)
+    kfac = np.linalg.norm(K.data) / np.linalg.norm(R.data)
     ndof = K.shape[1]
     use_lsqr = solver == "lsqr" or (solver == "auto" and ndof > lsqr_thresh)
-    if use_lsqr:
-        Aug = sp.vstack([K, w * R]).tocsr()
-        baug = np.concatenate([b, np.zeros(R.shape[0])])
-        s_tik = spla.lsqr(Aug, baug, atol=1e-8, btol=1e-8, iter_lim=lsqr_iters)[0]
+
+    if isinstance(lam, str) and lam.lower() == "auto":
+        if lam_sweep is None:
+            lam_sweep = np.geomspace(1e-3, 1.0, 16)
+        lam_used, lcurve = select_lambda_lcurve(K, b, R, kfac, lam_sweep, use_lsqr, lsqr_iters)
+        print(f"[auto-lambda] L-curve corner -> lam = {lam_used:.4g}  "
+              f"(swept {lam_sweep[0]:.1e}..{lam_sweep[-1]:.1e}, {len(lam_sweep)} pts)")
     else:
-        A = (K.T @ K + (w ** 2) * (R.T @ R)).tocsc()
-        s_tik = spla.spsolve(A, K.T @ b)
+        lam_used, lcurve = float(lam), None
+
+    w = lam_used * kfac
+    s_tik = _solve_tikhonov(K, b, R, w, use_lsqr, lsqr_iters)
     resid_tik = np.linalg.norm(K @ s_tik - b) / bnorm
     reg_norm = float(np.linalg.norm(R @ s_tik))      # roughness ||R s|| (L-curve y-axis)
 
@@ -211,7 +268,7 @@ def solve_membrane_fem(mesh: vedo.Mesh, dp: float, t: float, depth: int = 3,
     return dict(pts=pts, normals=n, radial=radial, faces=faces,
                 sigma1_raw=s1r, sigma2_raw=s2r, resid_raw=resid_raw,
                 sigma1=s1t, sigma2=s2t, N1=N1t, N2=N2t, d1=d1, d2=d2,
-                resid=resid_tik, reg_norm=reg_norm)
+                resid=resid_tik, reg_norm=reg_norm, lam=lam_used, lcurve=lcurve)
 
 
 def stress_scalar(r, name):
@@ -284,7 +341,8 @@ def report_sphere(tag, res, dp, t, R):
     """Sphere-specific summary: mean stress vs analytic dp*R/2t, deviatoric std (lines),
     for both the raw and the Tikhonov fields, plus residuals."""
     target = dp * R / (2.0 * t)
-    print(f"\n[{tag}]  analytic sigma = dp*R/2t = {target:.3f} Pa  (isotropic)")
+    print(f"\n[{tag}]  analytic sigma = dp*R/2t = {target:.3f} Pa  (isotropic)  "
+          f"[lambda used = {res['lam']:.4g}]")
     items = []
     if res["sigma1_raw"] is not None:
         items.append(("raw (min-norm)", res["sigma1_raw"], res["sigma2_raw"], res["resid_raw"]))
@@ -303,7 +361,8 @@ def main():
     ap.add_argument("--depth", type=int, default=3, help="frame/roughness neighbourhood")
     ap.add_argument("--dp", type=float, default=20.0, help="pressure jump (project default 20 Pa)")
     ap.add_argument("--t", type=float, default=0.05, help="wall thickness")
-    ap.add_argument("--lam", type=float, default=0.05, help="Tikhonov weight")
+    ap.add_argument("--lam", default="0.05",
+                    help="Tikhonov weight: a float, or 'auto' to pick it at the L-curve corner")
     ap.add_argument("--stretch", type=float, default=2.0)
     ap.add_argument("--no-gfdm", action="store_true", help="skip the GFDM head-to-head")
     ap.add_argument("--raw", action="store_true", help="colour by the raw (unregularised) field")
@@ -314,6 +373,7 @@ def main():
     ap.add_argument("--show", action="store_true")
     args = ap.parse_args()
     R = args.radius
+    lam_arg = "auto" if str(args.lam).lower() == "auto" else float(args.lam)
 
     print("=" * 70)
     print("STRESS-BASED FEM (primal virtual-work) vs analytic" +
@@ -322,11 +382,11 @@ def main():
 
     # ---- sphere ----
     sphere = vedo.IcoSphere(r=R, subdivisions=args.subdiv)
-    fs = solve_membrane_fem(sphere, args.dp, args.t, depth=args.depth, lam=args.lam)
-    fs["title"] = f"FEM sphere R={R}"
+    fs = solve_membrane_fem(sphere, args.dp, args.t, depth=args.depth, lam=lam_arg)
+    fs["title"] = f"FEM sphere R={R} (lam={fs['lam']:.3g})"
     report_sphere("FEM sphere", fs, args.dp, args.t, R)
-    if not args.no_gfdm:
-        gs = solve_gfdm(sphere, args.dp, args.t, depth=args.depth, lam=args.lam)
+    if not args.no_gfdm:                # GFDM has no auto mode; reuse the FEM-selected lambda
+        gs = solve_gfdm(sphere, args.dp, args.t, depth=args.depth, lam=fs["lam"])
         target = args.dp * R / (2.0 * args.t)
         mean = (gs["sigma1"] + gs["sigma2"]) / 2.0
         print(f"    GFDM          : mean={mean.mean():7.2f}  "
@@ -335,11 +395,12 @@ def main():
 
     # ---- prolate spheroid ----
     ell = vedo.IcoSphere(r=R, subdivisions=args.subdiv).scale([args.stretch, 1.0, 1.0])
-    fe = solve_membrane_fem(ell, args.dp, args.t, depth=args.depth, lam=args.lam)
-    fe["title"] = f"FEM stretched x{args.stretch}"
-    report(f"FEM spheroid x{args.stretch}", fe, args.dp, args.t, a=args.stretch * R, b=R)
+    fe = solve_membrane_fem(ell, args.dp, args.t, depth=args.depth, lam=lam_arg)
+    fe["title"] = f"FEM stretched x{args.stretch} (lam={fe['lam']:.3g})"
+    report(f"FEM spheroid x{args.stretch} [lambda={fe['lam']:.4g}]",
+           fe, args.dp, args.t, a=args.stretch * R, b=R)
     if not args.no_gfdm:
-        ge = solve_gfdm(ell, args.dp, args.t, depth=args.depth, lam=args.lam)
+        ge = solve_gfdm(ell, args.dp, args.t, depth=args.depth, lam=fe["lam"])
         report(f"GFDM spheroid x{args.stretch}", ge, args.dp, args.t, a=args.stretch * R, b=R)
 
     if args.raw:                      # colour by the unregularised field to see the lines

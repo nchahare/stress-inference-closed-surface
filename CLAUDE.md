@@ -250,6 +250,15 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
   → no true optimum, corner and min-error diverge). `--show` = interactive viewer, `--raw` shows
   the lines. Runners-up ruled out: LSFEM (SPD GFDM twin), mixed Hellinger–Reissner (needs
   compliance; H(div) surface elements unsupported).
+- **Auto-λ per mesh: `solve_membrane_fem(..., lam="auto")`** (or CLI `--lam auto`). Runs a one-off
+  λ-sweep (default geomspace(1e-3,1,16)), picks λ at the **residual-onset elbow** (max-dist-from-chord
+  of (log λ, log resid) — cMSM's panel-c rule, NO ground truth needed; `_elbow`/`_lcurve_corner`/
+  `select_lambda_lcurve`). Returns `res["lam"]` (numeric used) + `res["lcurve"]` (swept lams/resid/reg/idx);
+  printed in reports + shown in viewer titles. NOTE: λ is dimensionless (Frobenius-matched) so it's
+  refinement-invariant for a fixed geometry — only re-select for a NEW shape. The elbow is deliberately
+  CONSERVATIVE on closed surfaces (residual lifts off before min-error, so auto-λ ~1e-2 < error-optimal
+  ~1e-1) → favors equilibrium fidelity + sharp σ_max over σ_min; override with explicit λ if needed.
+  (Menger curvature + the (resid,reg) 2D elbow were tried and rejected: too low / endpoint-sensitive.)
 
 ## Files
 - `sphere_curvature.py` — per-vertex curvature, normals, local axes (`compute_vertex_frames`).
