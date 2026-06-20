@@ -290,7 +290,11 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
   recomputes resid/roughness so both respond to iters. → `out/fem_smoothing_sweep_<shape>.png` +
   per-vertex `.npz` (sigma1/2, pqr DOFs, frames, faces, coord, mask, metrics — for later 3D plots).
   Conclusion: m=0 optimal except on the sphere ⇒ FEM drops Laplacian. Flags: `--shapes --subdiv
-  --nlam --iters`.
+  --nlam --iters`. Has `build_mesh(shape,subdiv)` + `analytic_coord_mask(shape,pts)` reused elsewhere.
+- `export_fem_vtk.py` — solve FEM on the 4 shapes, write `out/fem_vtk/fem_<shape>.vtp` (ParaView):
+  per-vertex σ₁/σ₂, σ_max/σ_min, trace/mean/vonmises/shear, N1/N2, dir vectors d₁/d₂, normal, and
+  analytic σ_max/σ_min/trace + belt_mask. Default `--lam auto` (prints lam per shape). Flags:
+  `--shapes --subdiv --dp --t --lam --outdir`.
 - `membrane_stress_fd_v2.py` — same solve in the **principal curvature frame** (e1, e2 from
   `compute_curvature_frame`); adds `d1`, `d2` (principal stress directions, world R³), `r`
   shear diagnostic, and per-vertex `resid_pv`; includes `make_capsule` and `plot_stress_frame`

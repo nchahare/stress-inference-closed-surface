@@ -339,6 +339,24 @@ length ∝ principal tension, divergence/convergence = sign).
 & $py fem_validation.py
 ```
 
+**Export VTK files (sphere / prolate / oblate / capsule) for ParaView.** `export_fem_vtk.py`
+solves the FEM on each shape and writes `out/fem_vtk/fem_<shape>.vtp` carrying, per vertex:
+`sigma1`/`sigma2`, `sigma_max`/`sigma_min`, `trace`, `mean`, `vonmises`, `shear`, resultants
+`N1`/`N2`, the principal-stress direction vectors `d1`/`d2`, the `normal`, and the analytic
+`sigma_max_analytic`/`sigma_min_analytic`/`trace_analytic` + `belt_mask` for direct comparison.
+
+```powershell
+# all four shapes, auto-λ -> out/fem_vtk/fem_{sphere,prolate,oblate,capsule}.vtp
+& $py export_fem_vtk.py                          # flags: --shapes --subdiv --dp --t --lam --outdir
+& $py export_fem_vtk.py --shapes capsule --subdiv 5 --lam 0.05   # one shape, finer mesh, fixed λ
+```
+
+To view a shape interactively without exporting (capsule shown here), use `plot_fem` directly:
+
+```powershell
+& $py -c "from fem_smoothing_sweep import build_mesh; from membrane_stress_fem import solve_membrane_fem, plot_fem; m=build_mesh('capsule',4); r=solve_membrane_fem(m,20.0,0.05,depth=3,lam='auto'); r['title']=f\"FEM capsule (lam={r['lam']:.3g})\"; plot_fem([(m,r)], field='trace', show=True)"
+```
+
 **Key findings** (subdiv-4, Δp=20, t=0.05, vs GFDM):
 - **The "lines" are intrinsic, not a GFDM artefact.** The raw min-norm FEM — a completely
   different discretisation — produces the same spurious deviatoric (dev-std 73 at subdiv-3, 216 at
@@ -555,6 +573,7 @@ M1+M2 on **HH17 (decimated to HH20's 3766 pts) + HH20** for the real-mesh compar
 - `cmsm_sphere_compare.py` — **one-to-one cMSM Fig-15 comparison** on the closed sphere: λ-sweep (error / residual / L-curve) stacked under cMSM's own Fig-15 panels (auto-cropped from the supplement PDF via `pymupdf`) → `out/cmsm_sphere_compare.png`. We reproduce their L-curve; sphere optimum λ≈0.5 is artificially high (calibrate on the spheroid instead)
 - `fem_regularization_study.py` — cMSM-Fig-15-style λ-sweep on the prolate **spheroid** (genuine anisotropy → real optimum ≈0.05): trace-vs-full-σ error, residual, L-curve + 3D trace(σ) glyph with inferred-vs-analytic crosses → `out/fem_regularization.png`
 - `fem_smoothing_sweep.py` — joint **λ × Laplacian-iters** sweep on sphere/prolate/oblate/capsule; cMSM-Fig-15 layout per shape (error, σ₁-vs-coordinate, residual, L-curve), colored by iters; smooths the DOFs and recomputes residual/roughness → `out/fem_smoothing_sweep_<shape>.png` + per-vertex `.npz`. Shows m=0 (no smoothing) is optimal except on the sphere ⇒ FEM uses Tikhonov-λ alone
+- `export_fem_vtk.py` — solve the FEM on sphere/prolate/oblate/capsule and write `out/fem_vtk/fem_<shape>.vtp` (ParaView) with per-vertex σ₁/σ₂, σ_max/σ_min, trace/mean/vonmises/shear, resultants N1/N2, direction vectors d₁/d₂, normal, and analytic σ_max/σ_min/trace + belt_mask. Reuses `build_mesh`/`analytic_coord_mask` from `fem_smoothing_sweep`. Flags: `--shapes --subdiv --dp --t --lam --outdir`
 - `stress_smoothing_compare.py` — Laplacian smoothing of σ; raw vs smoothed vs mean
 - `membrane_stress_beltrami.py` — Beltrami/Airy stress-function solve (single scalar Φ)
 - `reg_compare.py` — cMSM-style (grad-trace + curl) regularization vs our Laplacian smoothing
