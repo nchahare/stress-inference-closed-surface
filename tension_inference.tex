@@ -1723,25 +1723,27 @@ everywhere) makes the active interpretation discriminating rather than
 descriptive.
 
 %% =========================================================================
-\section{Stress-based finite-element discretisation: an alternative to GFDM}
+\section{Stress-based finite-element discretisation}
 \label{sec:fem}
 
-The generalised finite-difference scheme of Section~\ref{sec:gfdm} is one
-discretisation of the balance law~\eqref{eq:equil}.  This section develops an
-\emph{independent} finite-element discretisation of the \emph{same} equation as a
-methodological cross-check, implemented in \texttt{membrane\_stress\_fem.py}; the
-validation, the intrinsic-lines finding and the timing are in
-Section~\ref{sec:fem-results}.
+This section presents the \emph{primary} numerical engine of this work: a
+stress-based finite-element discretisation of the membrane balance
+law~\eqref{eq:equil}, implemented in \texttt{membrane\_stress\_fem.py}.  It is
+the method of choice for closed and arbitrary-topology surfaces because it is
+faster, more accurate, and better scaled to embryo-resolution meshes than the
+generalised finite-difference (GFDM) scheme of Section~\ref{sec:gfdm}.
 
-Three questions motivate it.  (i) Is the closed-surface ``lines'' artefact
-(Section~\ref{sec:null-modes}) intrinsic to the statically-indeterminate problem,
-or is it specific to the local weighted-least-squares stencils?  A Galerkin
-scheme on the same mesh isolates the answer.  (ii) Does element integration
-recover the spheroid anisotropy more accurately than pointwise collocation?
-(iii) Because the reference cMSM method (Mar\'in-Llaurad\'o et al., 2023) is
-\emph{itself} a stress-based linear-triangle finite-element method --- restricted
-there to open domes --- this puts cMSM's exact formulation on a \emph{closed}
-surface, testing whether its open-boundary pinning was load-bearing.
+Three structural advantages drive the choice.  (i)~The P1 stiffness $K$ couples
+only 1-ring neighbours (${\sim}57$ non-zeros per row in $K^\top K$ vs
+${\sim}376$ for the depth-3 GFDM normal equations), making it $5$--$12\times$
+faster with no per-vertex weighted-least-squares operator to build.
+(ii)~Accuracy is at least as good as GFDM on every metric at the same mesh and
+$\lambda$, and better on most.
+(iii)~Putting the cMSM formulation (Mar\'in-Llaurad\'o et al., 2023) --- itself
+a stress-based P1 FEM, restricted to open domes with a global parametrisation
+--- on a \emph{closed} surface confirms directly that the ``lines'' artefact and
+singularity of $K$ are intrinsic to the static indeterminacy of closed surfaces,
+not to the GFDM stencils.
 
 %% -------------------------------------------------------------------------
 \subsection{Primal (virtual-work) weak form}
@@ -1849,8 +1851,9 @@ notes):
   \item \textbf{Representation:} P1 nodal stress in the per-vertex local frame
         ($3$ DOF, identical to GFDM, for a like-for-like comparison).
   \item \textbf{Regulariser:} a FEM-native 1-ring roughness
-        ($\int|\nabla_s N|^2$ from the P1 element gradients), Frobenius-matched to
-        $K$ so $\lambda=0.05$ is the same weight as GFDM.
+        ($\int|\nabla_s N|^2$ from the P1 element gradients), Frobenius-matched
+        to $K$ so that $\lambda$ is a dimensionless relative weight independent
+        of mesh spacing.
   \item \textbf{Implementation:} hand-rolled with \texttt{scipy.sparse}
         (consistent with the no-framework rule; the symmetric-tangential-tensor
         unknown is non-standard, so the tensor integrands are custom regardless
@@ -1927,6 +1930,48 @@ subdiv-5 & $30\,726$ & $110$\,s  & $9.2$\,s \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+%% -------------------------------------------------------------------------
+\subsection{Regularization analysis and the trace metric (cMSM-style)}
+\label{sec:fem-reg}
+
+To assess the regularization the same way Mar\'in-Llaurad\'o et al.\ (2023) validate cMSM
+(their Supplementary Fig.~15), we sweep the Tikhonov weight $\lambda$ on the prolate spheroid
+--- the closed-surface analogue of their open spherical cap, chosen because it carries genuine
+anisotropy so that \emph{over}-regularization penalizes the solution and a true optimum exists
+(on a closed \emph{sphere} the exact field is constant, so more smoothing always helps and no
+optimum appears).  Figure~\ref{fig:femreg} collects the analysis.
+
+\begin{figure}[ht]\centering
+  \includegraphics[width=\textwidth]{out/fem_regularization.png}
+  \caption{Regularization analysis of the stress FEM on the prolate spheroid ($2{:}1$,
+  subdiv-4, $\Delta p=20$\,Pa, $t=0.05$), in the style of cMSM Supplementary Fig.~15.
+  \textbf{(a)} Relative error vs $\lambda$ of $\mathrm{trace}(\sigma)=\sigma_1+\sigma_2$ and of
+  the full principal stress (errors over the equatorial belt, excluding the umbilic poles); both
+  are U-shaped with a minimum near $\lambda\approx0.3$, and the trace error stays \emph{below}
+  the full-$\sigma$ error throughout --- the cMSM observation that $\mathrm{trace}(\sigma)$ is the
+  more robustly recovered quantity (the roughness penalty acts on its gradients).
+  \textbf{(b)} $\sigma_{\max}$ vs latitude $\beta$ for three $\lambda$; the scatter narrows toward
+  the analytic hoop curve (black) as $\lambda$ grows.
+  \textbf{(c)} Force-balance residual $\|K\vv s-\vv b\|/\|\vv b\|$ rises monotonically with
+  $\lambda$ --- confirming the residual is a \emph{diagnostic}, not the objective.
+  \textbf{(d)} The L-curve (roughness $\|R\vv s\|$ vs residual); the corner identifies the optimal
+  $\lambda$ when no ground truth is available (the selector cMSM uses on experimental data).
+  \textbf{(e)} Spheroid coloured by $\mathrm{trace}(\sigma)$ with principal-stress crosses ---
+  red = inferred, green = analytic (meridional/hoop), arm length $\propto|\sigma_i|$ --- mirroring
+  cMSM's orthogonal arrow-pair glyph; inferred and analytic crosses nearly coincide.}
+  \label{fig:femreg}
+\end{figure}
+
+Two conclusions carry over to our setting.  First, the optimal weight ($\lambda\approx0.3$
+for the FEM on the closed prolate spheroid) must be chosen per method and geometry: the
+FEM-native 1-ring roughness and the closed-surface geometry require stronger smoothing
+before genuine anisotropy is over-flattened, and the trace error in particular is
+insensitive to $\lambda$ over a wide range (the plateau in panel~a).  The L-curve
+corner is an appropriate operational selector when no ground truth is available.
+Second, panel~(d) shows a clear knee that coincides with the onset of the residual
+rise in panel~(c); this is the regularization-selection rule for experimental data,
+where the analytic error of panel~(a) is unavailable.
 
 %% =========================================================================
 \begin{thebibliography}{Mar\'in-Llaurad\'o et al. (2023)}

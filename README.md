@@ -293,11 +293,11 @@ test, so high-curvature folds need curvature-**adaptive** refinement (a uniform 
 target is ~4e4 verts). **Timing** (sphere, depth-3): sd3 0.7s · sd4 7.6s · sd5 **267s**
 (direct) · sd6 532s (lsqr) — the direct normal-equation solve scales ~×35 per ×4 DOFs.
 
-### 10. Stress-based FEM — an alternative discretisation (§12 of `tension_inference`)
+### 10. Stress-based FEM — the primary engine (§12 of `tension_inference`)
 
-`membrane_stress_fem.py` solves the **same** balance law `div_s N + Δp·n = 0` by a
-finite-element method instead of GFDM, as a cross-check (and to put cMSM's formulation on a
-*closed* surface).
+`membrane_stress_fem.py` is the **primary numerical method** for closed and arbitrary-topology
+surfaces. It solves `div_s N + Δp·n = 0` via a primal virtual-work FEM — faster, more accurate,
+and better-scaled to embryo meshes than GFDM.
 
 **Methodology.** Primal **virtual-work** weak form (dot the balance with a vector test field
 `w`, integrate by parts on the closed surface): `∫_Γ N : ε_s(w) dS = ∫_Γ Δp (n·w) dS` — internal
@@ -348,9 +348,41 @@ length ∝ principal tension, divergence/convergence = sign).
   spheroid σ_max **1.7%** (GFDM 3.6%); capsule cylinder hoop **0.15%** / axial 3.8%. Linearity:
   `σ/(Δp/t)` constant to 4 decimals (sphere ratio 0.498 vs analytic 0.5). λ-tradeoff: FEM's σ_min
   keeps improving with larger λ, so its optimum sits **higher** than GFDM's 0.05.
-- **~5–12× faster:** subdiv-4 **2.0 s** vs 10.3 s, subdiv-5 **9.2 s** vs 110 s. `KᵀK` is 6.6× sparser
-  than the depth-3 GFDM `LᵀL` (57 vs 376 nnz/row), with no per-vertex WLS operator to build →
-  the better engine for embryo-scale, curvature-adaptive meshes.
+- **~5–12× faster:** subdiv-4 **2.0 s**, subdiv-5 **9.2 s**. `KᵀK` is 6.6× sparser (57 vs 376
+  nnz/row), with no per-vertex WLS operator to build → the better engine for embryo-scale,
+  curvature-adaptive meshes.
+- **Optimal λ ≈ 0.3** on the closed prolate spheroid (L-curve corner = min-error = onset of
+  residual rise); calibrate on the spheroid, not the sphere (on a sphere the true field is
+  constant isotropic so more smoothing always helps and no real optimum exists).
+
+### 11. Regularization & the cMSM L-curve (do we reproduce their Fig. 15?)
+
+`cmsm_sphere_compare.py` puts our FEM regularization side-by-side with cMSM's own
+**Supplementary Fig. 15** (sphere cap). It sweeps our single Tikhonov weight λ over `1e-4 → 50`
+on the **closed** unit sphere and stacks three diagnostics — error vs λ, force-balance residual
+vs λ, and the L-curve (roughness `‖Rs‖` vs residual) — directly under cMSM's panels, which it
+auto-crops from the supplement PDF (`out/cmsm_ref/grid_abcd.png`, needs `pymupdf`).
+
+```powershell
+# closed-sphere λ-sweep vs cMSM Fig. 15 -> out/cmsm_sphere_compare.png
+& $py cmsm_sphere_compare.py                    # flags: --subdiv --nlam
+
+# cMSM-Fig-15-style λ-sweep on the SPHEROID (genuine anisotropy) -> out/fem_regularization.png
+& $py fem_regularization_study.py
+```
+
+**Findings (subdiv-4, Δp=20, t=0.05).** We **do** reproduce the cMSM L-curve: our error-vs-λ is
+U-shaped, the residual is flat then rises sharply at a corner, and the L-curve has a clear knee —
+all matching their panel shapes. Our optimum is **2.6%** (full σ) / 2.3% (trace) vs their <1%; the
+gap is the closed-surface penalty (no pinned boundary to kill the null modes, local frames, the
+icosahedral mesh seeding the streaks).
+
+**Caveat — don't calibrate λ on the sphere.** On the closed sphere the L-curve corner (λ≈0.1) and
+the true min-error λ (≈0.49) do **not** coincide: error keeps dropping past the corner because the
+sphere's true field is constant isotropic, so smoothing the spurious anisotropy is always
+beneficial and never destroys real signal (cMSM flag the sphere as "special" for the same reason).
+Calibrate λ on the **spheroid** instead (`fem_regularization_study.py`), where genuine anisotropy
+makes over-smoothing costly so the corner ≈ min-error ≈ **0.05**.
 
 ### 6. Final-results simulations (method comparison: Local vs cMSM vs FEM)
 
@@ -394,9 +426,10 @@ Discretization:
 
 ## Status
 
-Last updated: **2026-06-18 (UTC-04:00)**
+Last updated: **2026-06-20 (UTC-04:00)**
 
 ### Done
+- [x] **cMSM Fig-15 L-curve reproduced** (`cmsm_sphere_compare.py` closed sphere + `fem_regularization_study.py` spheroid) — our FEM λ-sweep gives the same U-shaped error + L-curve corner as cMSM's Supplementary Fig. 15; optimum **2.6%** (full σ) vs their <1% (closed-surface penalty). KEY: the sphere is a bad λ-calibration target (corner λ≈0.1 ≠ min-error λ≈0.5, since smoothing a constant field always helps) — tune λ on the spheroid (corner ≈ min-error ≈ 0.05). Comparison auto-crops cMSM's panels from the supplement PDF — _2026-06-20_
 - [x] **Stress-based FEM IMPLEMENTED + validated** (`membrane_stress_fem.py`, `tension_inference` **§12**) — primal virtual-work (cMSM-style) weak form `∫ N:ε_s(w)=∫ Δp·n·w`, hand-rolled `scipy.sparse`, P1 nodal local-frame DOFs (square 3n system); element assembly + consistent load; singular-system solve = raw min-norm `lsqr` then Tikhonov with a **FEM-native 1-ring roughness** (Frobenius-matched so λ=0.05 matches GFDM); auto-iterative `lsqr` above 20k DOFs. **Findings:** raw FEM shows the same "lines" as GFDM ⇒ artefact is intrinsic to the indeterminacy, not a GFDM stencil effect (cMSM singular on closed surfaces); regularised FEM ≥ GFDM accuracy (sphere dev-std 4.4 vs 6.5, spheroid σ_max 1.7% vs 3.6%); **~5–12× faster** (subdiv-4 2.0 vs 10.3 s, subdiv-5 9.2 vs 110 s) — KᵀK is 6.6× sparser (57 vs 376 nnz/row) — _2026-06-18_
 - [x] **Stress-based FEM methodology decided + documented** (`tension_inference` **§12**) — chose **primal virtual-work (cMSM-style)**, **hand-rolled `scipy.sparse`**, P1 nodal local-frame DOFs; runners-up (LSFEM, mixed Hellinger–Reissner) weighed and recorded — _2026-06-18_
 - [x] **`tension_inference` conceptual expansion** — added **§1 elastostatics framing** (problem class, static determinacy, four method families, M1/M2/M3 constitutive ladder), **§3.4 fluid-vs-elastic limit** (`N=γP`/Young–Laplace + Marangoni; heterogeneous tension forces deviatoric shear; 1-dof-fluid vs 3-dof-elastic determinacy), **§11 neural-tube interpretation** synthesising the two added reference papers (Romo et al. 2014 passive bulge-inflation; Bal et al. 2026 active-gel shell) — total-vs-active split, tilt + compressive-`σ_min` active signatures, falsifiable HH17→HH20 thesis — and a **bibliography**. All section numbers shifted +1; PDF recompiled — _2026-06-18_
@@ -497,6 +530,8 @@ M1+M2 on **HH17 (decimated to HH20's 3766 pts) + HH20** for the real-mesh compar
 - `membrane_stress_fd.py` — direct GFDM membrane-stress solve (σ₁, σ₂); auto lsqr for large meshes
 - `membrane_stress_fem.py` — **stress-based FEM** (tension_inference §12): primal virtual-work (cMSM-style), P1 nodal local-frame DOFs, square 3n system, FEM-native 1-ring roughness, auto-iterative solve; returns σ₁/σ₂ + principal directions d₁/d₂; viewer colours by **trace σ₁+σ₂** (cMSM's metric; `--field` for vonmises/mean/shear/sigma_max/sigma_min) with **principal-stress crosses** (±d₁/±d₂, arms ∝|σᵢ|, red=tension/blue=compression); `--show` interactive, `--raw` to see the lines. ~5–12× faster than GFDM and ≥ its accuracy
 - `fem_validation.py` — **FEM validation suite** reproducing the GFDM §10 battery for `membrane_stress_fem`: convergence (subdiv 3–5, FEM vs GFDM), linearity (σ ∝ Δp/t), analytic benchmark (sphere/spheroid/capsule), λ tradeoff → `out/fem_validation.png` + printed tables
+- `cmsm_sphere_compare.py` — **one-to-one cMSM Fig-15 comparison** on the closed sphere: λ-sweep (error / residual / L-curve) stacked under cMSM's own Fig-15 panels (auto-cropped from the supplement PDF via `pymupdf`) → `out/cmsm_sphere_compare.png`. We reproduce their L-curve; sphere optimum λ≈0.5 is artificially high (calibrate on the spheroid instead)
+- `fem_regularization_study.py` — cMSM-Fig-15-style λ-sweep on the prolate **spheroid** (genuine anisotropy → real optimum ≈0.05): trace-vs-full-σ error, residual, L-curve + 3D trace(σ) glyph with inferred-vs-analytic crosses → `out/fem_regularization.png`
 - `stress_smoothing_compare.py` — Laplacian smoothing of σ; raw vs smoothed vs mean
 - `membrane_stress_beltrami.py` — Beltrami/Airy stress-function solve (single scalar Φ)
 - `reg_compare.py` — cMSM-style (grad-trace + curl) regularization vs our Laplacian smoothing

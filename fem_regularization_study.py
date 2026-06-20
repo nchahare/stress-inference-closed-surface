@@ -46,9 +46,9 @@ def _belt(pts):
     return np.abs(rad[:, 0]) < 0.9
 
 
-def sweep(subdiv=4, n_lam=10):
+def sweep(subdiv=4, n_lam=16):
     mesh = vedo.IcoSphere(r=R, subdivisions=subdiv).scale([A, 1.0, 1.0])
-    lams = np.geomspace(0.005, 0.5, n_lam)
+    lams = np.geomspace(1e-3, 5.0, n_lam)
     rows, saved = [], {}
     for lam in lams:
         r = solve_membrane_fem(mesh, DP, T, depth=3, lam=lam, raw=False, solver="direct")
