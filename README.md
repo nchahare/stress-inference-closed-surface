@@ -351,6 +351,15 @@ solves the FEM on each shape and writes `out/fem_vtk/fem_<shape>.vtp` carrying, 
 & $py export_fem_vtk.py --shapes capsule --subdiv 5 --lam 0.05   # one shape, finer mesh, fixed λ
 ```
 
+Generated outputs (subdiv-4, Δp=20 Pa, t=0.05, auto-λ at the L-curve corner):
+
+| shape | vertices | λ (auto) | residual | file |
+|---|---|---|---|---|
+| sphere | 2562 | 0.025 | 2.3e-3 | `out/fem_vtk/fem_sphere.vtp` |
+| prolate 2:1 | 2562 | 0.010 | 2.8e-3 | `out/fem_vtk/fem_prolate.vtp` |
+| oblate 1:2 | 2562 | 0.010 | 2.5e-3 | `out/fem_vtk/fem_oblate.vtp` |
+| capsule | 2522 | 0.025 | 1.3e-3 | `out/fem_vtk/fem_capsule.vtp` |
+
 To view a shape interactively without exporting (capsule shown here), use `plot_fem` directly:
 
 ```powershell
