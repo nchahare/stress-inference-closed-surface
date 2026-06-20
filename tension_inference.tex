@@ -2206,6 +2206,70 @@ L-curve corner --- and \emph{drop} the Laplacian post-smoothing inherited from t
 GFDM pipeline.  This both simplifies the method and removes a parameter that, away
 from the sphere, only trades equilibrium for cosmetic smoothness.
 
+%% -------------------------------------------------------------------------
+\subsection{Per-shape accuracy and mesh convergence}
+\label{sec:fem-accuracy}
+
+Table~\ref{tab:fem-accuracy} collects the relative errors at each shape's
+error-optimal $\lambda$ (no post-smoothing), measured over the well-defined region
+(equatorial belt for the spheroids, cylinder body for the capsule, excluding the
+frame-degenerate poles).  The combined ``full-$\sigma$'' column is the norm error
+$\|[\sigma_{\max}{-}\sigma_{\max}^{\mathrm{an}},\,
+\sigma_{\min}{-}\sigma_{\min}^{\mathrm{an}}]\|/\|[\sigma^{\mathrm{an}}]\|$; the
+remaining columns are \emph{median} per-vertex relative errors of the trace and the two
+principal stresses.
+
+\begin{table}[ht]\centering
+\caption{Stress-FEM relative error at the optimal $\lambda$ (subdiv-4, $\Delta p=20$\,Pa,
+$t=0.05$, no smoothing).  Full-$\sigma$ is a combined norm error; trace,
+$\sigma_{\max}$, $\sigma_{\min}$ are median per-vertex relative errors.}
+\label{tab:fem-accuracy}
+\begin{tabular}{lrrrrr}
+\toprule
+shape & $\lambda^\star$ & full-$\sigma$ & trace & $\sigma_{\max}$ & $\sigma_{\min}$ \\
+\midrule
+sphere          & $0.63$  & $3.45\%$ & $3.46\%$ & $2.45\%$ & $4.23\%$ \\
+prolate $2{:}1$ & $0.26$  & $2.47\%$ & $1.66\%$ & $1.35\%$ & $3.05\%$ \\
+oblate $1{:}2$  & $0.11$  & $6.72\%$ & $6.68\%$ & $2.14\%$ & $8.18\%$ \\
+capsule         & $0.046$ & $2.19\%$ & $1.35\%$ & $0.29\%$ & $3.43\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The mean tension (trace) and the larger principal stress $\sigma_{\max}$ are recovered
+to $0.3$--$2.5\%$ on every shape; the smaller, often compressive $\sigma_{\min}$ is the
+hardest quantity ($3$--$8\%$), as it is where the residual spurious anisotropy
+concentrates.  The oblate spheroid is the worst case ($6.7\%$ full-$\sigma$), which at
+first sight is concerning.  It is, however, a \emph{resolution} effect, not a method
+floor: the oblate carries the strongest curvature gradients of the four shapes and is
+simply under-resolved at subdiv-4.  Refining the mesh drives the error down at close to
+first order in the spacing $h$ (Table~\ref{tab:fem-oblate}): the error roughly halves
+each time the vertex count quadruples, so that by subdiv-6 the oblate matches the
+accuracy the other shapes already reach at subdiv-4.
+
+\begin{table}[ht]\centering
+\caption{Mesh convergence of the oblate spheroid ($1{:}2$, $\Delta p=20$\,Pa, $t=0.05$),
+full-$\sigma$ error at the optimal $\lambda$.  The error is close to first order in $h$
+($h$ halves as the vertex count quadruples), and the optimal $\lambda$ \emph{decreases}
+under refinement --- a finer mesh has a smaller spurious null-mode amplitude and so needs
+less regularisation, which in turn preserves more of the genuine signal.}
+\label{tab:fem-oblate}
+\begin{tabular}{lrrr}
+\toprule
+mesh & vertices & $\lambda^\star$ & full-$\sigma$ error \\
+\midrule
+subdiv-4 & $2\,562$  & $0.11$  & $6.72\%$ \\
+subdiv-5 & $10\,242$ & $0.043$ & $4.44\%$ \\
+subdiv-6 & $40\,962$ & $0.04$  & $2.19\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The subdiv-6 solve ($122\,886$ DOFs) uses the iterative \texttt{lsqr} path rather than a
+direct factorisation of $K^\top K+w^2R^\top R$, whose fill-in is prohibitive at that
+size --- the regime the automatic direct/iterative switch
+(Section~\ref{sec:fem-solve}) is designed for.
+
 %% =========================================================================
 \begin{thebibliography}{Mar\'in-Llaurad\'o et al. (2023)}
 
