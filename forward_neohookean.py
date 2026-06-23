@@ -190,8 +190,8 @@ def main():
     ap.add_argument("--show", action="store_true", help="open a vedo window of the result")
     ap.add_argument("--field", default="trace",
                     choices=["trace", "sigma1", "sigma2", "shear", "sigma_max", "sigma_min"])
-    ap.add_argument("--vmin", type=float, default=0.0, help="colorbar lower limit")
-    ap.add_argument("--vmax", type=float, default=25.0, help="colorbar upper limit")
+    ap.add_argument("--vmin", type=float, default=None, help="colorbar lower limit (default: data min)")
+    ap.add_argument("--vmax", type=float, default=None, help="colorbar upper limit (default: data max)")
     args = ap.parse_args()
 
     mesh = build_reference(args.shape, args.subdiv, args.R)
@@ -220,7 +220,9 @@ def main():
         vals = fields[args.field]
         dm = vedo.Mesh([x, faces])
         dm.celldata[args.field] = vals
-        dm.cmap("viridis", args.field, on="cells", vmin=args.vmin, vmax=args.vmax)
+        vmin = float(vals.min()) if args.vmin is None else args.vmin
+        vmax = float(vals.max()) if args.vmax is None else args.vmax
+        dm.cmap("viridis", args.field, on="cells", vmin=vmin, vmax=vmax)
         dm.add_scalarbar(title=f"{args.field} (N/m)")
         txt = vedo.Text2D(f"Forward NH {args.shape}  dp={args.dp}  mu_s={args.mu}  |  "
                           f"{args.field}", pos="top-left")
