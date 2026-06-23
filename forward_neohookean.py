@@ -211,11 +211,15 @@ def report_capsule(X, x, faces, s1, s2, dp):
           f"(target {s_axial:.3f})   anisotropy {np.mean(np.abs(smax[cap]-smin[cap])/smax[cap]):.2%}")
 
 
-def load_normalized_mesh(path):
+def load_normalized_mesh(path, decimate=None):
     """Load an arbitrary closed surface mesh, triangulate, centre at the origin and scale
     to mean radius 1 (the forward stress PATTERN is scale-invariant), and orient faces
-    outward so the enclosed-volume / pressure term inflates."""
+    outward so the enclosed-volume / pressure term inflates. `decimate` (target vertex
+    count) coarsens the mesh first -- e.g. HH17 down to HH20's element size."""
     m = vedo.load(path).clean().triangulate()
+    if decimate and m.npoints > decimate:
+        m = m.decimate(n=decimate).clean().triangulate()
+        print(f"  decimated to {m.npoints} verts")
     X = m.coordinates.astype(float)
     X = X - X.mean(0)
     X = X / np.linalg.norm(X, axis=1).mean()
@@ -238,7 +242,7 @@ def load_normalized_mesh(path):
 
 
 def run_mesh_file(args):
-    mesh = load_normalized_mesh(args.mesh)
+    mesh = load_normalized_mesh(args.mesh, decimate=args.decimate)
     X = mesh.coordinates.astype(float)
     faces = np.asarray(mesh.cells, dtype=int)
     Minv, A0 = reference_geometry(X, faces)
@@ -283,6 +287,7 @@ def render(args, x, faces, s1, s2, tag="forward"):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mesh", default=None, help="run on an arbitrary closed surface mesh (e.g. HH20.vtk)")
+    ap.add_argument("--decimate", type=int, default=None, help="coarsen --mesh to this vertex count first")
     ap.add_argument("--shape", default="sphere", choices=SHAPES)
     ap.add_argument("--subdiv", type=int, default=4)
     ap.add_argument("--dp", type=float, default=20.0)
