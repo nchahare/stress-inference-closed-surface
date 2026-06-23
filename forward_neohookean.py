@@ -36,12 +36,17 @@ from scipy.optimize import minimize, brentq
 import vedo
 
 from membrane_stress_fd import analytic_axisym
+from membrane_stress_fd_v2 import make_capsule
 
 # shape -> spheroid semi-axes (axis = x); sphere is A=B=1, prolate A>B, oblate A<B
 SPHEROID = {"sphere": (1.0, 1.0), "prolate": (2.0, 1.0), "oblate": (0.5, 1.0)}
+SHAPES = list(SPHEROID) + ["capsule"]
+CAP_R, CAP_H, CAP_NTHETA, CAP_NPHI = 1.0, 2.0, 40, 14     # capsule (axis = z, body |z|<=H)
 
 
 def build_reference(shape: str, subdiv: int, R: float = 1.0) -> vedo.Mesh:
+    if shape == "capsule":
+        return make_capsule(R=CAP_R, H=CAP_H, ntheta=CAP_NTHETA, nphi=CAP_NPHI)
     A, B = SPHEROID[shape]
     return vedo.IcoSphere(r=R, subdivisions=subdiv).scale([A * R, B * R, B * R])
 
@@ -180,9 +185,34 @@ def report_spheroid(shape, X, x, faces, s1, s2, dp):
           f"{an_max[eq].mean()/an_min[eq].mean():.3f}")
 
 
+def report_capsule(X, x, faces, s1, s2, dp):
+    """Compare per-triangle forward resultants to the pressure-vessel solution:
+    cylinder body (|z|<=H) hoop=dp*R, axial=dp*R/2; hemispherical caps isotropic dp*R/2."""
+    cen = x[faces].mean(axis=1)
+    z = cen[:, 2]
+    s_hoop, s_axial = dp * CAP_R, dp * CAP_R / 2.0           # resultants (N/m)
+    on_cyl = np.abs(z) <= CAP_H
+    an_max = np.where(on_cyl, s_hoop, s_axial)
+    an_min = np.full(len(faces), s_axial)
+    smax, smin = np.maximum(s1, s2), np.minimum(s1, s2)
+    band = 0.12
+    belt = (np.abs(z) < CAP_H + CAP_R - band) & (np.abs(np.abs(z) - CAP_H) > band)
+    cyl = on_cyl & belt
+    cap = (~on_cyl) & belt
+    drift = np.linalg.norm(x - X, axis=1).max() / np.linalg.norm(X, axis=1).mean()
+    e_max = np.median(np.abs(smax[belt] - an_max[belt]) / np.abs(an_max[belt]))
+    e_min = np.median(np.abs(smin[belt] - an_min[belt]) / np.abs(an_min[belt]))
+    print(f"\n  shape drift    : max|x-X| / mean|X| = {drift:.2e}   (stiff-reference -> small)")
+    print(f"  belt (n={belt.sum()}) median rel err:  sigma_max {e_max:.2%}   sigma_min {e_min:.2%}")
+    print(f"  cylinder (n={cyl.sum()}): hoop {smax[cyl].mean():.3f} (target {s_hoop:.3f})   "
+          f"axial {smin[cyl].mean():.3f} (target {s_axial:.3f})")
+    print(f"  caps     (n={cap.sum()}): sigma {0.5*(smax[cap]+smin[cap]).mean():.3f} "
+          f"(target {s_axial:.3f})   anisotropy {np.mean(np.abs(smax[cap]-smin[cap])/smax[cap]):.2%}")
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--shape", default="sphere", choices=list(SPHEROID))
+    ap.add_argument("--shape", default="sphere", choices=SHAPES)
     ap.add_argument("--subdiv", type=int, default=4)
     ap.add_argument("--dp", type=float, default=20.0)
     ap.add_argument("--mu", type=float, default=500.0, help="surface shear modulus mu_s (N/m)")
@@ -211,6 +241,8 @@ def main():
     s1, s2 = recover_stress(x, faces, Minv, args.mu)
     if args.shape == "sphere":
         report_sphere(x, faces, Minv, s1, s2, args.mu, args.dp, args.R)
+    elif args.shape == "capsule":
+        report_capsule(X, x, faces, s1, s2, args.dp)
     else:
         report_spheroid(args.shape, X, x, faces, s1, s2, args.dp)
 
