@@ -35,6 +35,16 @@ import numpy as np
 from scipy.optimize import minimize, brentq
 import vedo
 
+from membrane_stress_fd import analytic_axisym
+
+# shape -> spheroid semi-axes (axis = x); sphere is A=B=1, prolate A>B, oblate A<B
+SPHEROID = {"sphere": (1.0, 1.0), "prolate": (2.0, 1.0), "oblate": (0.5, 1.0)}
+
+
+def build_reference(shape: str, subdiv: int, R: float = 1.0) -> vedo.Mesh:
+    A, B = SPHEROID[shape]
+    return vedo.IcoSphere(r=R, subdivisions=subdiv).scale([A * R, B * R, B * R])
+
 
 def reference_geometry(X: np.ndarray, faces: np.ndarray):
     """Per-triangle reference frame, inverse edge map Minv (2x2) and area A0."""
@@ -127,41 +137,12 @@ def analytic_sphere_stretch(mu_s, dp, R=1.0):
     return brentq(f, 1.0 + 1e-9, 5.0)
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--subdiv", type=int, default=4)
-    ap.add_argument("--dp", type=float, default=20.0)
-    ap.add_argument("--mu", type=float, default=500.0, help="surface shear modulus mu_s (N/m)")
-    ap.add_argument("--R", type=float, default=1.0)
-    ap.add_argument("--show", action="store_true", help="open a vedo window of the result")
-    ap.add_argument("--field", default="trace",
-                    choices=["trace", "sigma1", "sigma2", "shear"])
-    ap.add_argument("--vmin", type=float, default=0.0, help="colorbar lower limit")
-    ap.add_argument("--vmax", type=float, default=25.0, help="colorbar upper limit")
-    args = ap.parse_args()
-
-    mesh = vedo.IcoSphere(r=args.R, subdivisions=args.subdiv)
-    X = mesh.coordinates.astype(float)
-    faces = np.asarray(mesh.cells, dtype=int)
-    Minv, A0 = reference_geometry(X, faces)
-    print(f"sphere reference: n={len(X)} verts, {len(faces)} tris, mu_s={args.mu}, dp={args.dp}")
-
-    res = minimize(energy_and_grad, X.ravel(), args=(X, faces, Minv, A0, args.mu, args.dp),
-                   jac=True, method="L-BFGS-B",
-                   options=dict(maxiter=2000, ftol=1e-12, gtol=1e-9))
-    x = res.x.reshape(len(X), 3)
-    gnorm = np.linalg.norm(res.jac)
-    print(f"  L-BFGS: {res.nit} iters, Pi={res.fun:.6e}, ||grad||={gnorm:.2e}, {res.message}")
-
-    # deformed radius / stretch
+def report_sphere(x, faces, Minv, s1, s2, mu_s, dp, R):
     r = np.linalg.norm(x - x.mean(0), axis=1)
-    lam = r.mean() / args.R
-    lam_star = analytic_sphere_stretch(args.mu, args.dp, args.R)
+    lam = r.mean() / R
+    lam_star = analytic_sphere_stretch(mu_s, dp, R)
     drift = (r.max() - r.min()) / r.mean()
-
-    s1, s2 = recover_stress(x, faces, Minv, args.mu)
-    N_laplace = args.dp * (lam * args.R) / 2.0               # equilibrium Laplace resultant
-
+    N_laplace = dp * (lam * R) / 2.0
     print(f"\n  stretch lambda : solver {lam:.6f}   analytic {lam_star:.6f}   "
           f"err {abs(lam-lam_star)/lam_star:.2%}")
     print(f"  shape drift    : (rmax-rmin)/rmean = {drift:.2e}   (stiff-reference -> small)")
@@ -169,18 +150,80 @@ def main():
     print(f"  sigma2 (mean)  : {s2.mean():.4f}  std {s2.std():.4f}")
     print(f"  Laplace target : dp*r/2 = {N_laplace:.4f}")
     print(f"  isotropy |s1-s2|/s1 (mean) : {np.mean(np.abs(s1-s2)/np.abs(s1)):.2%}")
-    print(f"  tension error vs Laplace   : "
+    print(f"  tension err vs Laplace     : "
           f"{abs(0.5*(s1.mean()+s2.mean()) - N_laplace)/N_laplace:.2%}")
 
+
+def report_spheroid(shape, X, x, faces, s1, s2, dp):
+    """Compare per-triangle forward resultants to the analytic axisymmetric solution
+    (resultants = analytic_axisym with t=1) over an equatorial belt."""
+    A, B = SPHEROID[shape]
+    cen = x[faces].mean(axis=1)                                   # deformed triangle centroids
+    an_merid, an_hoop = analytic_axisym(cen, dp, 1.0, a=A, b=B)   # resultants N/m (t=1)
+    an_max, an_min = np.maximum(an_merid, an_hoop), np.minimum(an_merid, an_hoop)
+    smax, smin = np.maximum(s1, s2), np.minimum(s1, s2)
+    rad = cen / np.linalg.norm(cen, axis=1, keepdims=True)
+    belt = np.abs(rad[:, 0]) < 0.9                                # exclude umbilic x-poles
+    disp = np.linalg.norm(x - X, axis=1)
+    drift = disp.max() / np.linalg.norm(X, axis=1).mean()
+    e_max = np.median(np.abs(smax[belt] - an_max[belt]) / np.abs(an_max[belt]))
+    e_min = np.median(np.abs(smin[belt] - an_min[belt]) / np.abs(an_min[belt]))
+    # equatorial values (near the y/z great circle, |x|~0)
+    eq = np.abs(cen[:, 0]) < 0.1 * A
+    print(f"\n  shape drift    : max|x-X| / mean|X| = {drift:.2e}   (stiff-reference -> small)")
+    print(f"  belt (n={belt.sum()}) median rel err:  sigma_max {e_max:.2%}   sigma_min {e_min:.2%}")
+    print(f"  equator (n={eq.sum()}):  sigma_max {smax[eq].mean():.3f} (analytic "
+          f"{an_max[eq].mean():.3f})   sigma_min {smin[eq].mean():.3f} (analytic "
+          f"{an_min[eq].mean():.3f})")
+    print(f"  equator anisotropy sigma_max/sigma_min: solver "
+          f"{smax[eq].mean()/smin[eq].mean():.3f}   analytic "
+          f"{an_max[eq].mean()/an_min[eq].mean():.3f}")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--shape", default="sphere", choices=list(SPHEROID))
+    ap.add_argument("--subdiv", type=int, default=4)
+    ap.add_argument("--dp", type=float, default=20.0)
+    ap.add_argument("--mu", type=float, default=500.0, help="surface shear modulus mu_s (N/m)")
+    ap.add_argument("--R", type=float, default=1.0)
+    ap.add_argument("--show", action="store_true", help="open a vedo window of the result")
+    ap.add_argument("--field", default="trace",
+                    choices=["trace", "sigma1", "sigma2", "shear", "sigma_max", "sigma_min"])
+    ap.add_argument("--vmin", type=float, default=0.0, help="colorbar lower limit")
+    ap.add_argument("--vmax", type=float, default=25.0, help="colorbar upper limit")
+    args = ap.parse_args()
+
+    mesh = build_reference(args.shape, args.subdiv, args.R)
+    X = mesh.coordinates.astype(float)
+    faces = np.asarray(mesh.cells, dtype=int)
+    Minv, A0 = reference_geometry(X, faces)
+    print(f"{args.shape} reference: n={len(X)} verts, {len(faces)} tris, "
+          f"mu_s={args.mu}, dp={args.dp}")
+
+    res = minimize(energy_and_grad, X.ravel(), args=(X, faces, Minv, A0, args.mu, args.dp),
+                   jac=True, method="L-BFGS-B",
+                   options=dict(maxiter=4000, ftol=1e-12, gtol=1e-9))
+    x = res.x.reshape(len(X), 3)
+    print(f"  L-BFGS: {res.nit} iters, Pi={res.fun:.6e}, "
+          f"||grad||={np.linalg.norm(res.jac):.2e}, {res.message}")
+
+    s1, s2 = recover_stress(x, faces, Minv, args.mu)
+    if args.shape == "sphere":
+        report_sphere(x, faces, Minv, s1, s2, args.mu, args.dp, args.R)
+    else:
+        report_spheroid(args.shape, X, x, faces, s1, s2, args.dp)
+
     if args.show:
-        fields = {"trace": s1 + s2, "sigma1": s1, "sigma2": s2, "shear": 0.5 * (s1 - s2)}
+        fields = {"trace": s1 + s2, "sigma1": s1, "sigma2": s2, "shear": 0.5 * (s1 - s2),
+                  "sigma_max": np.maximum(s1, s2), "sigma_min": np.minimum(s1, s2)}
         vals = fields[args.field]
         dm = vedo.Mesh([x, faces])
         dm.celldata[args.field] = vals
         dm.cmap("viridis", args.field, on="cells", vmin=args.vmin, vmax=args.vmax)
         dm.add_scalarbar(title=f"{args.field} (N/m)")
-        txt = vedo.Text2D(f"Forward NH sphere  dp={args.dp}  mu_s={args.mu}  "
-                          f"lambda={lam:.4f}  |  {args.field}", pos="top-left")
+        txt = vedo.Text2D(f"Forward NH {args.shape}  dp={args.dp}  mu_s={args.mu}  |  "
+                          f"{args.field}", pos="top-left")
         vedo.show(dm, txt, axes=1, title="Forward neo-Hookean inflation").close()
 
 
