@@ -136,6 +136,8 @@ def main():
     ap.add_argument("--show", action="store_true", help="open a vedo window of the result")
     ap.add_argument("--field", default="trace",
                     choices=["trace", "sigma1", "sigma2", "shear"])
+    ap.add_argument("--vmin", type=float, default=0.0, help="colorbar lower limit")
+    ap.add_argument("--vmax", type=float, default=25.0, help="colorbar upper limit")
     args = ap.parse_args()
 
     mesh = vedo.IcoSphere(r=args.R, subdivisions=args.subdiv)
@@ -175,8 +177,7 @@ def main():
         vals = fields[args.field]
         dm = vedo.Mesh([x, faces])
         dm.celldata[args.field] = vals
-        clim = (float(np.percentile(vals, 2)), float(np.percentile(vals, 98)))
-        dm.cmap("viridis", args.field, on="cells", vmin=clim[0], vmax=clim[1])
+        dm.cmap("viridis", args.field, on="cells", vmin=args.vmin, vmax=args.vmax)
         dm.add_scalarbar(title=f"{args.field} (N/m)")
         txt = vedo.Text2D(f"Forward NH sphere  dp={args.dp}  mu_s={args.mu}  "
                           f"lambda={lam:.4f}  |  {args.field}", pos="top-left")
