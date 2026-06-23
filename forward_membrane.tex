@@ -302,6 +302,80 @@ Following the project rule (sphere first):
 \end{itemize}
 
 %% =========================================================================
+\section{Results}
+\label{sec:results}
+
+The scheme above is implemented in \texttt{forward\_neohookean.py} (energy minimisation by
+L-BFGS with the analytic gradient; \texttt{numpy}/\texttt{scipy}/\texttt{vedo}). A note on the
+constitutive form: in practice we use the \emph{stress-free incompressible} neo-Hookean membrane
+$W(I,J)=\mu_s\,(I+J^{-2}-3)$ rather than the cMSM compressible form $\mu(I-2)+\lambda(J-1)^2$ of
+Section~\ref{sec:const}. The reason is exactly the stiff-reference strategy: the compressible form
+carries a residual pre-tension $2\mu$ at the reference (its second Piola--Kirchhoff stress is
+$2\mu\,\vv A^{-1}\neq\vv0$ at $I=2,J=1$), which under a stiff modulus would force a large
+deformation; the incompressible form is genuinely stress-free at the reference
+($\Spk=2\mu_s(\vv I-J^{-2}\CC^{-1})=\vv0$ there), so a stiff $\mu_s$ gives the small strain we want.
+
+All runs use IcoSphere subdiv-4 (capsule: $n=2522$), $\Delta p=20$\,Pa, $\mu_s=500$\,N/m, and the
+target shape as the stress-free reference. The recovered tensions are compared with the closed-form
+membrane resultants (Table~\ref{tab:fwd}); Figure~\ref{fig:fwd} shows the $\sigma_{\max}$ fields.
+
+\begin{table}[ht]\centering
+\caption{Forward neo-Hookean inflation vs.\ the analytic membrane resultants ($N$/m), at
+representative locations. ``drift'' is $\max\|\vv x-\vv X\|/\overline{\|\vv X\|}$; ``belt err'' is
+the median per-triangle relative error of $\sigma_{\max}$ away from the umbilic poles / junction.}
+\label{tab:fwd}
+\begin{tabular}{llrrrr}
+\toprule
+shape & location & $\sigma_{\max}$ (analytic) & $\sigma_{\min}$ (analytic) & belt err & drift \\
+\midrule
+sphere          & (uniform)  & $10.02$ ($10.02$) & $9.99$ ($10.02$) & $0.4\%$ & $2.7\!\times\!10^{-4}$ \\
+prolate $2{:}1$ & equator    & $17.47$ ($17.47$) & $10.02$ ($9.99$) & $0.4\%$ & $3.2\!\times\!10^{-3}$ \\
+capsule         & cylinder   & $19.97$ ($20.0$)  & $10.02$ ($10.0$) & $0.2\%$ & $2.5\!\times\!10^{-3}$ \\
+capsule         & caps       & $10.05$ ($10.0$)  & $10.05$ ($10.0$) & $0.2\%$ & --- \\
+oblate $1{:}2$  & equator    & $10.07$ ($10.05$) & $\mathbf{0.0}$ ($\mathbf{-19.70}$) & $6.1\%$ & $2.3\!\times\!10^{-2}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[ht]\centering
+  \includegraphics[width=0.49\textwidth]{out/forward_sphere.png}\hfill
+  \includegraphics[width=0.49\textwidth]{out/forward_prolate.png}\\[2pt]
+  \includegraphics[width=0.49\textwidth]{out/forward_oblate.png}\hfill
+  \includegraphics[width=0.49\textwidth]{out/forward_capsule.png}
+  \caption{Forward neo-Hookean inflation, deformed surfaces coloured by the larger principal
+  resultant $\sigma_{\max}$ (N/m): sphere (uniform $\approx10$), prolate spheroid (hoop band
+  $\approx17.5$ at the equator fading to $\approx10$ at the poles), oblate spheroid, and capsule
+  (cylinder hoop $\approx20$, hemispherical caps $\approx10$ with a sharp junction step). The fields
+  are smooth and free of the triangulation ``lines'' of the inverse solve --- the constitutive law
+  selects the unique physical member of the self-equilibrated family.}
+  \label{fig:fwd}
+\end{figure}
+
+\paragraph{Sphere, prolate, capsule: $\lesssim0.4\%$.} On the three shapes whose analytic field is
+everywhere tensile the forward solve reproduces the closed form to a few tenths of a percent ---
+the sphere's isotropy ($0.4\%$), the prolate's $1.75$ equatorial hoop/meridional anisotropy
+($\sigma_{\max}/\sigma_{\min}=1.744$ vs.\ $1.749$), and the capsule's pressure-vessel field (hoop
+$\Delta pR$, axial $\Delta pR/2$, isotropic caps). Crucially this is \emph{tighter} than the inverse
+inference at the same resolution (which sits at $2$--$7\%$, \texttt{tension\_inference.tex}\,\S12),
+because the forward field carries no null-mode ambiguity: it is the unique ground truth M3 is meant
+to provide. The shape drift stays $\lesssim0.3\%$, confirming the stiff-reference strategy.
+
+\paragraph{Oblate: membrane wrinkling under compressive hoop.} The oblate is qualitatively
+different. Its analytic axisymmetric solution demands a strongly \emph{compressive} hoop near the
+equator ($\sigma_{\min}=-19.7$\,N/m), because for a flattened spheroid $r_2>2r_1$ there. A
+\emph{membrane} cannot sustain compression --- with no bending stiffness it wrinkles --- so the
+forward solver relaxes the compressive hoop to $\sigma_{\min}\approx0$ and deforms more to do so
+(drift $2.3\times10^{-2}$, an order of magnitude above the other shapes); $\sigma_{\max}$ still
+tracks the analytic value ($10.07$ vs.\ $10.05$). This is not a solver defect but real membrane
+physics, and it is exactly the situation cMSM guard against with their $\det\sigma>0$ inequality
+constraint (Section~\ref{sec:const} of \texttt{tension\_inference.tex}\,\S12): a passive membrane
+projects compressive principal tensions away. (A sustained compressive $\sigma_{\min}$ therefore
+signals either bending stiffness --- a shell, not a membrane --- or, in tissue, an \emph{active}
+pre-tension; this is the active-signature reading developed in the inference notes.) The oblate is
+thus a useful stress test: it shows the forward model honours the membrane assumption rather than
+blindly matching a formal solution.
+
+%% =========================================================================
 \section{Software / packages}
 \label{sec:packages}
 

@@ -31,6 +31,7 @@ Run:
 from __future__ import annotations
 
 import argparse
+import os
 import numpy as np
 from scipy.optimize import minimize, brentq
 import vedo
@@ -218,6 +219,7 @@ def main():
     ap.add_argument("--mu", type=float, default=500.0, help="surface shear modulus mu_s (N/m)")
     ap.add_argument("--R", type=float, default=1.0)
     ap.add_argument("--show", action="store_true", help="open a vedo window of the result")
+    ap.add_argument("--save", default=None, help="render offscreen and save a PNG to this path")
     ap.add_argument("--field", default="trace",
                     choices=["trace", "sigma1", "sigma2", "shear", "sigma_max", "sigma_min"])
     ap.add_argument("--vmin", type=float, default=None, help="colorbar lower limit (default: data min)")
@@ -246,7 +248,7 @@ def main():
     else:
         report_spheroid(args.shape, X, x, faces, s1, s2, args.dp)
 
-    if args.show:
+    if args.show or args.save:
         fields = {"trace": s1 + s2, "sigma1": s1, "sigma2": s2, "shear": 0.5 * (s1 - s2),
                   "sigma_max": np.maximum(s1, s2), "sigma_min": np.minimum(s1, s2)}
         vals = fields[args.field]
@@ -256,9 +258,18 @@ def main():
         vmax = float(vals.max()) if args.vmax is None else args.vmax
         dm.cmap("viridis", args.field, on="cells", vmin=vmin, vmax=vmax)
         dm.add_scalarbar(title=f"{args.field} (N/m)")
-        txt = vedo.Text2D(f"Forward NH {args.shape}  dp={args.dp}  mu_s={args.mu}  |  "
-                          f"{args.field}", pos="top-left")
-        vedo.show(dm, txt, axes=1, title="Forward neo-Hookean inflation").close()
+        txt = vedo.Text2D(f"Forward NH {args.shape}  |  {args.field}  "
+                          f"[{vmin:.1f}, {vmax:.1f}] N/m", pos="top-left")
+        plt = vedo.Plotter(offscreen=not args.show, size=(1000, 850),
+                           title="Forward neo-Hookean inflation")
+        plt.show(dm, txt, axes=1, azimuth=30, elevation=15)
+        if args.save:
+            os.makedirs(os.path.dirname(args.save) or ".", exist_ok=True)
+            plt.screenshot(args.save)
+            print(f"  saved {args.save}")
+        if args.show:
+            plt.interactive()
+        plt.close()
 
 
 if __name__ == "__main__":
