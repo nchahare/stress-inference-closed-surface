@@ -1,0 +1,367 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{bm}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue]{hyperref}
+
+%% Short-hands (kept consistent with tension_inference.tex)
+\newcommand{\vv}[1]{\bm{#1}}          % bold vector / tensor
+\newcommand{\nn}{\vv{n}}               % unit surface normal
+\newcommand{\FF}{\vv{F}}               % surface deformation gradient
+\newcommand{\CC}{\vv{C}}               % right Cauchy--Green
+\newcommand{\Spk}{\vv{S}}               % second Piola--Kirchhoff
+\newcommand{\sg}{\vv{\sigma}}          % Cauchy membrane stress
+\newcommand{\xx}{\vv{x}}               % deformed position
+\newcommand{\XX}{\vv{X}}               % reference position
+\newcommand{\tp}{\otimes}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\dd}{\,\mathrm{d}}
+\newcommand{\tr}{\operatorname{tr}}
+
+\title{The forward problem: hyperelastic membrane inflation\\
+\large a constitutive ground truth for closed-surface tension (method M3)}
+\author{Working notes (forward neo-Hookean membrane FE)}
+\date{2026-06-20}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\bigskip
+
+%% =========================================================================
+\section{Why a forward problem, and what it gives us}
+\label{sec:why}
+
+The tension-inference pipeline (companion notes, \texttt{tension\_inference.tex})
+solves the \emph{inverse} membrane problem: given a deformed shape $\Gamma$ and a
+pressure $\Delta p$, find the surface stress that balances them. On a closed surface
+this balance is statically determinate in principle but its discretisation carries a
+self-equilibrated null space, so the inverse solve is ill-posed and must be
+regularised. There is, consequently, no \emph{exact} reference stress on a general
+closed shape against which to measure the inferred field --- only analytic solutions
+for the sphere, spheroid and capsule.
+
+The \emph{forward} problem removes that gap. We posit a stress-free reference surface,
+a hyperelastic constitutive law and a pressure, and solve for the deformed
+configuration and its stress by energy minimisation. Because the elastic energy is
+convex for moderate strains, the forward solution is \emph{unique}: the constitutive
+law and the reference together \emph{select one member} of the self-equilibrated family
+that makes the inverse problem ambiguous. The forward stress is therefore a clean,
+null-mode-free ground truth --- including the deviatoric and minor-principal components
+that the inverse solve recovers least well --- and it is available on
+\emph{arbitrary} shapes, not just the analytic ones. This is method M3 of the project
+matrix.
+
+\paragraph{The key modelling choice (why the shape need not be prescribed exactly).}
+We are interested in the \emph{tension distribution}, not the precise deformed shape.
+On a pressurised membrane the tension is governed by shape and pressure
+(quasi-determinate), so it is insensitive to small shape changes. We exploit this: take
+the \emph{target} shape as the (near) stress-free reference, choose a \emph{stiff}
+material, and apply the pressure. The deformed shape then drifts from the target only by
+the elastic strain $\varepsilon \sim \sigma/(\text{membrane stiffness})$, which we make
+small ($\lesssim 1\%$) by choosing the shear modulus $\mu$ large. The recovered tension
+is then the equilibrium tension on (essentially) the target geometry. As $\mu$ grows the
+strain vanishes but the stress stays finite (it is fixed by equilibrium), so the limit
+is well behaved; $\mu$ is kept finite only so that the constitutive law genuinely picks
+the unique solution.
+
+%% =========================================================================
+\section{Kinematics of a surface membrane}
+\label{sec:kinematics}
+
+Let the reference (stress-free) midsurface be $\Gamma_0\subset\R^3$ with material
+coordinates $\vv\xi=(\xi^1,\xi^2)$ and embedding $\XX(\vv\xi)$. Deformation maps it to
+$\Gamma$ with $\xx(\vv\xi)$. The reference and deformed covariant tangent bases are
+\begin{equation}
+  \vv A_\alpha=\frac{\partial\XX}{\partial\xi^\alpha},\qquad
+  \vv a_\alpha=\frac{\partial\xx}{\partial\xi^\alpha},\qquad \alpha\in\{1,2\}.
+\end{equation}
+The \emph{surface deformation gradient} is the (3$\times$2) two-point tensor
+\begin{equation}
+  \FF=\vv a_\alpha\tp \vv A^\alpha,
+  \qquad \vv A^\alpha\cdot\vv A_\beta=\delta^\alpha_\beta,
+\end{equation}
+mapping reference tangent vectors to deformed ones. The (2$\times$2, in-plane) right
+Cauchy--Green tensor and its invariants are
+\begin{equation}
+  \CC=\FF^{\!\top}\FF,\qquad
+  C_{\alpha\beta}=\vv a_\alpha\cdot\vv a_\beta,\qquad
+  I=\tr_{A}\CC=A^{\alpha\beta}C_{\alpha\beta},\qquad
+  J=\sqrt{\det\!\big(A^{\alpha\gamma}C_{\gamma\beta}\big)},
+\end{equation}
+where $A^{\alpha\beta}$ is the inverse reference metric. $I$ is the trace of the
+in-plane stretch ($I=\lambda_1^2+\lambda_2^2$ in principal stretches $\lambda_i$) and
+$J=\lambda_1\lambda_2$ is the local \emph{areal} stretch (deformed area / reference
+area). For a flat, isotropically-meshed reference one may take $A_{\alpha\beta}
+=\delta_{\alpha\beta}$ per element (Section~\ref{sec:fe}).
+
+%% =========================================================================
+\section{Constitutive law: 2D membrane neo-Hookean}
+\label{sec:const}
+
+We use the same membrane neo-Hookean energy as the cMSM forward simulations
+(Mar\'in-Llaurad\'o et al., 2023), a strain energy \emph{per unit reference area}
+\begin{equation}
+  \psi(I,J)=\mu\,(I-2)+\lambda\,(J-1)^2,
+  \label{eq:psi}
+\end{equation}
+with shear modulus $\mu$ and an areal-penalty modulus $\lambda$ (their choice
+$\lambda=2\mu$; both have units of surface tension, N/m). The $\mu(I-2)$ term resists
+shear/stretch; the $\lambda(J-1)^2$ term resists area change and supplies a stable
+equilibrium under pressure. The second Piola--Kirchhoff surface stress follows from
+$\Spk=2\,\partial\psi/\partial\CC$:
+\begin{equation}
+  \Spk
+  =2\frac{\partial\psi}{\partial I}\,\vv A^{-1}
+  +2\frac{\partial\psi}{\partial J}\,\frac{\partial J}{\partial\CC}
+  =2\mu\,\vv A^{-1}
+  +\lambda\,(J-1)\,J\,\CC^{-1},
+  \label{eq:S}
+\end{equation}
+using $\partial I/\partial\CC=\vv A^{-1}$ (reference inverse metric) and
+$\partial J/\partial\CC=\tfrac12 J\,\CC^{-1}$. The physical \emph{Cauchy membrane
+stress} (force per unit deformed length, i.e.\ the surface tension tensor compared
+against the inference) is the push-forward
+\begin{equation}
+  \sg=\frac{1}{J}\,\FF\,\Spk\,\FF^{\!\top},
+  \label{eq:cauchy}
+\end{equation}
+a symmetric in-plane (3$\times$3, rank-2) tensor with $\sg\,\nn=\vv0$. Its non-zero
+eigenvalues are the principal tensions $\sigma_1,\sigma_2$ that we compare to the
+inferred field. (Note $\sigma$ here is a force-per-length \emph{resultant}, matching our
+$N$; divide by thickness $t$ if a true stress is wanted.)
+
+%% =========================================================================
+\section{Equilibrium: energy functional and weak form}
+\label{sec:equil}
+
+\subsection{Total potential energy}
+The deformed configuration minimises the total potential energy
+\begin{equation}
+  \Pi[\xx]=\underbrace{\int_{\Gamma_0}\psi(I,J)\dd A_0}_{\text{elastic energy}}
+  \;-\;\underbrace{\Delta p\, V[\xx]}_{\text{pressure work}},
+  \qquad
+  V[\xx]=\frac13\oint_{\Gamma}\xx\cdot\nn\dd a,
+  \label{eq:Pi}
+\end{equation}
+where $V$ is the volume enclosed by the closed deformed surface (divergence theorem) and
+$\Delta p$ is the internal--external pressure difference. Stationarity
+$\delta\Pi=0$ for all admissible variations $\delta\xx$ gives the weak form
+\begin{equation}
+  \underbrace{\int_{\Gamma_0}\Spk:\delta\vv E\dd A_0}_{\text{internal virtual work}}
+  \;=\;
+  \underbrace{\Delta p\oint_{\Gamma}(\nn\cdot\delta\xx)\dd a}_{\text{external (pressure) virtual work}},
+  \qquad
+  \delta\vv E=\tfrac12\big(\FF^{\!\top}\delta\FF+\delta\FF^{\!\top}\FF\big),
+  \label{eq:weak}
+\end{equation}
+$\vv E=\tfrac12(\CC-\vv A)$ being the Green--Lagrange strain. The right-hand side is a
+\emph{follower} load: the normal $\nn$ and area element $\dd a$ are evaluated on the
+\emph{deformed} surface, so the pressure term depends on the unknown $\xx$. Equivalently,
+the pressure work is simply $\Delta p\,\delta V=\Delta p\oint\nn\cdot\delta\xx\dd a$,
+which is where the follower form comes from.
+
+\subsection{Pressure control vs.\ volume control}
+Two ways to drive the inflation:
+\begin{itemize}[nosep]
+  \item \textbf{Pressure-controlled:} $\Delta p$ prescribed, $V$ free. Simple, but a
+        closed membrane can be \emph{unstable} once past the inflation limit point
+        (the balloon instability: $\dd(\Delta p)/\dd V<0$), where Newton diverges.
+  \item \textbf{Volume-controlled:} prescribe the enclosed volume $V=V^\star$ via a
+        Lagrange multiplier; the multiplier \emph{is} the pressure $\Delta p$ (a
+        readout). The augmented stationarity is
+        $\int\Spk:\delta\vv E\dd A_0-\Delta p\,\delta V=0$, $\;V[\xx]=V^\star$.
+        This traverses the limit point stably and is exactly the device the cMSM
+        vertex model used to read off lumen pressure.
+\end{itemize}
+For a stiff membrane at modest $\Delta p$ we are far below the limit point and
+pressure control is adequate; volume control is the robust fallback.
+
+%% =========================================================================
+\section{Finite-element discretisation: P1 membrane triangles}
+\label{sec:fe}
+
+The reference surface is a triangulation; the unknowns are the deformed nodal
+positions $\xx_i\in\R^3$ (3 DOF/node). We use the \textbf{constant-strain triangle
+(CST) membrane element}: piecewise-linear (P1) geometry, so each triangle has a
+\emph{constant} deformation gradient and hence constant stress. This is the standard
+membrane element and the counterpart of the P1 elements in the inverse solver
+(\texttt{getShapeFunctions.m}, \texttt{'Triangle'} in the cMSM code).
+
+\paragraph{Element deformation gradient.} On a triangle with reference vertices
+$\XX_0,\XX_1,\XX_2$ and deformed vertices $\xx_0,\xx_1,\xx_2$, form the edge matrices
+\begin{equation}
+  \vv D_X=[\,\XX_1-\XX_0\;\;\XX_2-\XX_0\,]\in\R^{3\times2},\qquad
+  \vv D_x=[\,\xx_1-\xx_0\;\;\xx_2-\xx_0\,]\in\R^{3\times2},
+\end{equation}
+and a 2D reference frame (orthonormal tangent basis $\vv t_1,\vv t_2$ of the reference
+triangle) so that $\hat{\vv D}_X=[\vv t_1\,\vv t_2]^{\!\top}\vv D_X\in\R^{2\times2}$ is
+invertible. Then the surface deformation gradient and Cauchy--Green follow as
+\begin{equation}
+  \FF=\vv D_x\,\hat{\vv D}_X^{-1}\,[\vv t_1\,\vv t_2]^{\!\top},\qquad
+  \CC=\FF^{\!\top}\FF,\qquad
+  A_0=\tfrac12\big|\vv D_X(:,1)\times\vv D_X(:,2)\big|,
+\end{equation}
+with $A_0$ the reference triangle area. $I,J,\Spk,\sg$ are then constant on the element
+via \eqref{eq:S}--\eqref{eq:cauchy}.
+
+\paragraph{Element internal force and tangent.} The element energy is
+$\Psi_e=A_0\,\psi(I,J)$. Its gradient and Hessian with respect to the 9 element DOFs
+$\vv u_e=(\xx_0,\xx_1,\xx_2)$ give the internal force and material+geometric tangent
+\begin{equation}
+  \vv f^{\mathrm{int}}_e=\frac{\partial\Psi_e}{\partial\vv u_e},\qquad
+  \vv K^{\mathrm{mat+geo}}_e=\frac{\partial^2\Psi_e}{\partial\vv u_e\,\partial\vv u_e},
+\end{equation}
+assembled into the global residual and stiffness. These derivatives are available in
+closed form for \eqref{eq:psi} but are most safely obtained by \emph{automatic
+differentiation} of $\Psi_e(\vv u_e)$ (Section~\ref{sec:packages}).
+
+\paragraph{Pressure (follower) load.} The discrete enclosed volume and its gradient
+(the pressure force) are
+\begin{equation}
+  V=\frac{1}{6}\sum_{\text{tri}}\xx_0\cdot(\xx_1\times\xx_2),\qquad
+  \vv f^{\mathrm{ext}}=\Delta p\,\frac{\partial V}{\partial\xx},
+\end{equation}
+which distributes the pressure as nodal forces along deformed normals. Its derivative
+$\partial^2 V/\partial\xx\,\partial\xx$ is the \emph{load (pressure) stiffness}; it is
+non-symmetric, so the global tangent
+$\vv K=\vv K^{\mathrm{mat+geo}}-\Delta p\,\partial^2 V/\partial\xx^2$ is non-symmetric and
+must be solved with a general (not Cholesky) sparse solver.
+
+%% =========================================================================
+\section{Boundary conditions: a free-floating pressurised body}
+\label{sec:bc}
+
+The target case is a \emph{closed, free-floating} surface (embryo) under internal
+pressure --- \emph{no} physical boundary, unlike the pinned open domes of cMSM. This is
+admissible because a closed surface under uniform pressure is \emph{self-equilibrated}:
+the net pressure force $\oint\Delta p\,\nn\dd a$ and torque vanish. The only obstruction
+is the 6-dimensional \textbf{rigid-body null space} (3 translations + 3 rotations) of the
+stiffness matrix. Two standard cures:
+\begin{itemize}[nosep]
+  \item \textbf{Minimal ``3--2--1'' restraint:} fix one node in all 3 directions, a
+        second in 2, a third in 1 (6 constraints total, nodes non-collinear). Because the
+        body is in self-equilibrium the reactions are essentially zero, so this introduces
+        \emph{no spurious stress} --- it only removes the rigid modes.
+  \item \textbf{Rigid-mode projection:} keep all DOFs free and project the 6 rigid modes
+        out of the residual and increment (or use a minimum-norm \texttt{lsqr} solve).
+        Equivalent stress, no anchor nodes.
+\end{itemize}
+The pressure load is consistent (orthogonal to the rigid modes), so a solution exists.
+Volume control (Section~\ref{sec:equil}) adds one Lagrange-multiplier row/column to the
+tangent and replaces $\Delta p$ by an unknown; the rigid-mode treatment is unchanged.
+
+%% =========================================================================
+\section{Solution algorithm}
+\label{sec:solve}
+
+\begin{enumerate}[label=\arabic*.,nosep]
+  \item \textbf{Mesh \& reference.} Build the reference surface (\texttt{vedo.IcoSphere},
+        the capsule builder, or an embryo mesh); store reference frames, edge matrices
+        $\hat{\vv D}_X$ and areas $A_0$ once.
+  \item \textbf{Load stepping.} Ramp $\Delta p$ (or $V^\star$) in $n_{\text{step}}$
+        increments from $0$ to the target. For a stiff membrane the response is nearly
+        linear, so $n_{\text{step}}=1$--$5$ suffices; use more only for soft materials or
+        near the limit point.
+  \item \textbf{Newton iteration} per step: assemble residual
+        $\vv r=\vv f^{\mathrm{int}}-\Delta p\,\partial V/\partial\xx$ and tangent
+        $\vv K$; apply the 3--2--1 constraints (or projection); solve
+        $\vv K\,\delta\vv u=-\vv r$ with a sparse direct solver
+        (\texttt{scipy.sparse.linalg.spsolve}) or GMRES for large/non-symmetric systems;
+        update $\xx\leftarrow\xx+\delta\vv u$; iterate to $\|\vv r\|<\text{tol}$
+        (typically 3--6 iterations).
+  \item \textbf{Stress recovery.} From the converged $\FF$ per element compute
+        $\sg$ \eqref{eq:cauchy} and its eigenvalues $\sigma_1,\sigma_2$; average to nodes
+        if a nodal field is wanted. Export to VTK alongside the inferred field.
+  \item \textbf{Diagnostics.} Track the shape drift $\max\|\xx-\XX\|/R$ (should be
+        $\lesssim1\%$ for the stiff-reference strategy), the enclosed volume, and the
+        smallest tangent eigenvalue (limit-point proximity).
+\end{enumerate}
+
+%% =========================================================================
+\section{Validation plan}
+\label{sec:validation}
+
+Following the project rule (sphere first):
+\begin{itemize}[nosep]
+  \item \textbf{Sphere.} A neo-Hookean spherical membrane inflates self-similarly with a
+        closed-form pressure--stretch relation $\Delta p(\lambda)$; check the solver
+        reproduces it and that $\sigma_1=\sigma_2=\Delta p\,R/2$ (resultant). Verify the
+        balloon limit point is \emph{not} crossed at the working $\Delta p$.
+  \item \textbf{Prolate / oblate spheroid, capsule.} Take the analytic shape as the
+        stress-free reference, inflate with stiff $\mu$, confirm the shape drift is small
+        and the recovered $\sigma_1,\sigma_2$ match the axisymmetric closed forms
+        (Section~\ref{sec:why}); these become the M3 ground truth.
+  \item \textbf{Cross-check against inference.} Feed the (slightly) deformed shape to the
+        inverse FEM and compare --- the forward field is the unique, null-mode-free target
+        the inference should recover.
+\end{itemize}
+
+%% =========================================================================
+\section{Software / packages}
+\label{sec:packages}
+
+The forward problem is genuinely nonlinear (hyperelastic energy + follower load +
+Newton), unlike the linear inverse solve. Three viable stacks, in order of fit to this
+project:
+
+\paragraph{(A) Hand-rolled \texttt{scipy.sparse} + automatic differentiation
+(recommended).}
+Consistent with the project's no-framework convention and reuses the existing
+\texttt{vedo} mesh/IO and VTK export. Needed packages:
+\begin{itemize}[nosep]
+  \item \texttt{numpy}, \texttt{scipy} --- array maths; \texttt{scipy.sparse} +
+        \texttt{scipy.sparse.linalg} (\texttt{spsolve}/\texttt{gmres}) for the Newton
+        linear solves; \texttt{scipy.optimize} optionally for an energy-minimisation
+        formulation (trust-region / L-BFGS as a robust fallback to Newton).
+  \item \textbf{Automatic differentiation} of the element energy $\Psi_e(\vv u_e)$ to get
+        exact internal forces and tangents without hand-deriving \eqref{eq:S} and the
+        geometric/pressure stiffness. Either \texttt{jax} (\texttt{jax.grad},
+        \texttt{jax.hessian}, \texttt{vmap} over elements --- fastest, vectorised) or
+        \texttt{autograd}. This is the single most labour-saving dependency; the CST
+        energy is small (9 DOF/element) so per-element AD is cheap.
+  \item \texttt{vedo} (already installed) --- reference-mesh construction and VTK output;
+        \texttt{numpy}-side assembly into global sparse matrices.
+\end{itemize}
+Estimated $\sim$300--500 lines, fully transparent, no Christoffel/shell machinery.
+
+\paragraph{(B) \texttt{scikit-fem} (installed, 12.0.1).} Can assemble the forms and apply
+constraints, and supports custom nonlinear (bi)linear forms with a Newton loop. However,
+membrane elements \emph{embedded in} $\R^3$ (a 2-manifold element carrying 3 nodal DOFs,
+with the deformed metric as unknown) are not its native setting; the follower-pressure
+load and the deformed-configuration geometry would still be hand-coded. Usable for the
+assembly bookkeeping, but it does not remove the hyperelastic-membrane-specific work.
+
+\paragraph{(C) \texttt{FEniCS}/\texttt{FEniCSx} or \texttt{Firedrake}.} The most capable
+for nonlinear hyperelastic shells/membranes: UFL expresses $\psi$, $\FF$, the follower
+load and the Lagrange-multiplier volume constraint symbolically, with automatic tangents
+and robust nonlinear solvers (PETSc SNES). The cost is a heavy dependency that is awkward
+to install on Windows (typically via \texttt{conda}/WSL/Docker) and a departure from the
+project's lightweight stack. Best reserved for if the hand-rolled solver proves limiting
+(e.g.\ large embryo meshes needing PETSc scalability).
+
+\paragraph{Recommendation.} Start with (A): \texttt{numpy} + \texttt{scipy.sparse} for
+assembly/solves, \texttt{jax} for element-level autodiff of \eqref{eq:psi}, and
+\texttt{vedo} for meshes and VTK. It matches the existing pipeline, keeps the whole
+forward solver inspectable, and is more than sufficient for sphere/spheroid/capsule and
+embryo-scale meshes. Escalate to (C) only if PETSc-level performance becomes necessary.
+
+%% =========================================================================
+\section*{Summary}
+\addcontentsline{toc}{section}{Summary}
+The forward problem inflates a stress-free reference surface under (follower) internal
+pressure using a P1 CST membrane neo-Hookean model \eqref{eq:psi}, minimising the total
+potential energy \eqref{eq:Pi} by Newton iteration with a 3--2--1 (or projection)
+treatment of the rigid-body modes of a free-floating closed body. Using the target shape
+as a \emph{stiff} reference keeps the deformed shape within $\sim1\%$ of the target, so
+the recovered $\sigma_1,\sigma_2$ are the equilibrium tensions on (essentially) the
+desired geometry --- a unique, null-mode-free ground truth (M3) for arbitrary closed
+surfaces, including embryos with no analytic solution. The recommended implementation is
+hand-rolled \texttt{numpy}/\texttt{scipy.sparse} with \texttt{jax} autodiff for the
+element tangents and \texttt{vedo} for mesh I/O.
+
+\end{document}
