@@ -375,6 +375,61 @@ pre-tension; this is the active-signature reading developed in the inference not
 thus a useful stress test: it shows the forward model honours the membrane assumption rather than
 blindly matching a formal solution.
 
+%% -------------------------------------------------------------------------
+\subsection{Saddle geometry: the peanut neck}
+\label{sec:peanut}
+
+To check the solver on a shape with \emph{negative} Gaussian curvature we inflate a peanut
+(dumbbell): two convex lobes ($K>0$) joined by a thin waist that is a saddle ($K<0$), built as a
+surface of revolution (\texttt{forward\_saddle\_demo.py}). Figure~\ref{fig:peanut} colours the
+deformed shape by the smaller principal resultant $\sigma_{\min}$.
+
+\begin{figure}[ht]\centering
+  \includegraphics[width=0.62\textwidth]{out/forward_peanut_sigmin.png}
+  \caption{Forward neo-Hookean inflation of a peanut, coloured by $\sigma_{\min}$ (diverging map
+  centred at $0$; red $=$ tension). The whole surface is tensile; the saddle \emph{neck} carries the
+  \emph{lowest} tension (darkest) while the convex lobes carry the most. Internal pressure on a
+  thin neck is balanced mainly by the large azimuthal (hoop) curvature there, so $\sigma_{\min}$
+  stays positive.}
+  \label{fig:peanut}
+\end{figure}
+
+The pattern is the headline: \textbf{tension is lowest at the saddle neck and highest in the convex
+lobes}, and it is everywhere tensile. Quantitatively, as the neck is thinned (radius $0.2\!\to\!0.02$)
+the mean $\sigma_{\min}$ in the $K<0$ band falls from $2.55$ to $1.05$\,N/m but never goes negative,
+with negligible shape drift. So negative Gaussian curvature, under internal pressure, does \emph{not}
+force compression --- contrary to the naive expectation. Compression instead came from the
+\emph{convex} oblate equator (Section above), where disparate principal curvatures ($r_2>2r_1$) drive
+the hoop negative. The sign of the stress is set by the Young--Laplace balance with the actual
+curvature magnitudes and the global force balance, not by the sign of $K$. (We do not model wrinkling
+or impose any $\det\sigma>0$ projection here --- the goal is the tension \emph{pattern}, and where a
+formal solution would be compressive the membrane simply reports a near-zero minor tension.)
+
+%% -------------------------------------------------------------------------
+\subsection{Arbitrary closed meshes: the HH20 embryo}
+\label{sec:arbitrary}
+
+The same solver runs on any closed surface mesh via \texttt{forward\_neohookean.py --mesh <file>}:
+the mesh is centred and scaled to unit mean radius (the stress \emph{pattern} is scale-invariant),
+faces are oriented outward for the pressure term, and degenerate (zero-area) triangles are dropped.
+Figure~\ref{fig:hh20} shows the chick neural-tube surface \textbf{HH20} ($n=3766$, closed) inflated
+this way and coloured by $\mathrm{trace}\,\sigma$.
+
+\begin{figure}[ht]\centering
+  \includegraphics[width=0.62\textwidth]{out/forward_hh20.png}
+  \caption{Forward neo-Hookean inflation of the closed HH20 embryo surface, coloured by
+  $\mathrm{trace}\,\sigma=\sigma_1+\sigma_2$. Tension concentrates at the \emph{constrictions /
+  necks} between the lobes and is lowest in the bulged interiors --- the same neck-tension signature
+  as the peanut, now on real morphology. (Coarse mesh: the field carries per-triangle noise; the
+  colour range is clipped for display.)}
+  \label{fig:hh20}
+\end{figure}
+
+This is the intended use: feed a segmented embryo surface, take it as the stress-free reference,
+inflate under lumen pressure, and read the resulting membrane-tension pattern --- tension peaking at
+the morphological constrictions. No analytic solution exists here, which is exactly why the forward
+model (a unique, constitutively-pinned field) is useful as the M3 reference for such shapes.
+
 %% =========================================================================
 \section{Software / packages}
 \label{sec:packages}

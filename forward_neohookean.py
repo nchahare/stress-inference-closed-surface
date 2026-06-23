@@ -211,8 +211,78 @@ def report_capsule(X, x, faces, s1, s2, dp):
           f"(target {s_axial:.3f})   anisotropy {np.mean(np.abs(smax[cap]-smin[cap])/smax[cap]):.2%}")
 
 
+def load_normalized_mesh(path):
+    """Load an arbitrary closed surface mesh, triangulate, centre at the origin and scale
+    to mean radius 1 (the forward stress PATTERN is scale-invariant), and orient faces
+    outward so the enclosed-volume / pressure term inflates."""
+    m = vedo.load(path).clean().triangulate()
+    X = m.coordinates.astype(float)
+    X = X - X.mean(0)
+    X = X / np.linalg.norm(X, axis=1).mean()
+    faces = np.asarray(m.cells, dtype=int)
+    # drop degenerate triangles (repeated index or zero area = collinear sliver); they carry
+    # no area/volume/energy, so removing them changes nothing geometrically and avoids NaNs.
+    nondeg = (faces[:, 0] != faces[:, 1]) & (faces[:, 1] != faces[:, 2]) & (faces[:, 0] != faces[:, 2])
+    faces = faces[nondeg]
+    A = 0.5 * np.linalg.norm(np.cross(X[faces[:, 1]] - X[faces[:, 0]],
+                                      X[faces[:, 2]] - X[faces[:, 0]]), axis=1)
+    faces = faces[A > 1e-10 * A.max()]
+    ndrop = nondeg.size - len(faces)
+    if ndrop:
+        print(f"  dropped {ndrop} degenerate triangle(s)")
+    x0, x1, x2 = X[faces[:, 0]], X[faces[:, 1]], X[faces[:, 2]]
+    V = np.sum(np.einsum("ij,ij->i", x0, np.cross(x1, x2))) / 6.0
+    if V < 0:                                  # inward-oriented -> flip so pressure inflates
+        faces = faces[:, [0, 2, 1]]
+    return vedo.Mesh([X, faces])
+
+
+def run_mesh_file(args):
+    mesh = load_normalized_mesh(args.mesh)
+    X = mesh.coordinates.astype(float)
+    faces = np.asarray(mesh.cells, dtype=int)
+    Minv, A0 = reference_geometry(X, faces)
+    print(f"{os.path.basename(args.mesh)}: n={len(X)} verts, {len(faces)} tris (normalised), "
+          f"mu_s={args.mu}, dp={args.dp}")
+    res = minimize(energy_and_grad, X.ravel(), args=(X, faces, Minv, A0, args.mu, args.dp),
+                   jac=True, method="L-BFGS-B",
+                   options=dict(maxiter=20000, maxfun=40000, ftol=1e-13, gtol=1e-10))
+    x = res.x.reshape(len(X), 3)
+    print(f"  L-BFGS: {res.nit} iters, ||grad||={np.linalg.norm(res.jac):.2e}, {res.message}")
+    s1, s2 = recover_stress(x, faces, Minv, args.mu)
+    drift = np.linalg.norm(x - X, axis=1).max() / np.linalg.norm(X, axis=1).mean()
+    print(f"  shape drift: {drift:.2e}")
+    for name, v in [("sigma_max", np.maximum(s1, s2)), ("sigma_min", np.minimum(s1, s2)),
+                    ("trace", s1 + s2)]:
+        print(f"  {name:10s}: min {v.min():8.3f}  median {np.median(v):8.3f}  max {v.max():8.3f}")
+    render(args, x, faces, s1, s2, tag=os.path.splitext(os.path.basename(args.mesh))[0])
+
+
+def render(args, x, faces, s1, s2, tag="forward"):
+    if not (args.show or args.save):
+        return
+    fields = {"trace": s1 + s2, "sigma1": s1, "sigma2": s2, "shear": 0.5 * (s1 - s2),
+              "sigma_max": np.maximum(s1, s2), "sigma_min": np.minimum(s1, s2)}
+    vals = fields[args.field]
+    dm = vedo.Mesh([x, faces]); dm.celldata[args.field] = vals
+    vmin = float(np.percentile(vals, 2)) if args.vmin is None else args.vmin
+    vmax = float(np.percentile(vals, 98)) if args.vmax is None else args.vmax
+    dm.cmap("viridis", args.field, on="cells", vmin=vmin, vmax=vmax)
+    dm.add_scalarbar(title=f"{args.field} (N/m)")
+    txt = vedo.Text2D(f"Forward NH {tag}  |  {args.field}  [{vmin:.2f}, {vmax:.2f}]", pos="top-left")
+    plt = vedo.Plotter(offscreen=not args.show, size=(1000, 850))
+    plt.show(dm, txt, axes=1, azimuth=30, elevation=15)
+    if args.save:
+        os.makedirs(os.path.dirname(args.save) or ".", exist_ok=True)
+        plt.screenshot(args.save); print(f"  saved {args.save}")
+    if args.show:
+        plt.interactive()
+    plt.close()
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--mesh", default=None, help="run on an arbitrary closed surface mesh (e.g. HH20.vtk)")
     ap.add_argument("--shape", default="sphere", choices=SHAPES)
     ap.add_argument("--subdiv", type=int, default=4)
     ap.add_argument("--dp", type=float, default=20.0)
@@ -225,6 +295,10 @@ def main():
     ap.add_argument("--vmin", type=float, default=None, help="colorbar lower limit (default: data min)")
     ap.add_argument("--vmax", type=float, default=None, help="colorbar upper limit (default: data max)")
     args = ap.parse_args()
+
+    if args.mesh:                       # arbitrary closed surface (e.g. the HH20 embryo)
+        run_mesh_file(args)
+        return
 
     mesh = build_reference(args.shape, args.subdiv, args.R)
     X = mesh.coordinates.astype(float)
