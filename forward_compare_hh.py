@@ -128,7 +128,7 @@ def render(panels, field, show, outdir):
         m.add_scalarbar(title=f"{field} (N/m)")
         plt.at(k).show(m, vedo.Text2D(f"{tag}  |  {field}", pos="top-left"),
                        axes=1, azimuth=30, elevation=15)
-    out = os.path.join(outdir, "forward_hh_compare.png")
+    out = os.path.join(outdir, f"forward_hh_compare_{field}.png")
     plt.screenshot(out); print(f"saved {out}")
     if show:
         plt.interactive()

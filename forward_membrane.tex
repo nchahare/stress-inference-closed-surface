@@ -430,6 +430,40 @@ inflate under lumen pressure, and read the resulting membrane-tension pattern --
 the morphological constrictions. No analytic solution exists here, which is exactly why the forward
 model (a unique, constitutively-pinned field) is useful as the M3 reference for such shapes.
 
+%% -------------------------------------------------------------------------
+\subsection{Comparing developmental stages: HH17 vs HH20}
+\label{sec:hh-compare}
+
+To compare two stages we put HH17 and HH20 on a \emph{common} scale --- both meshes are divided by
+a single length (the mean of their two mean-radii) so their relative physical size is preserved
+(HH20 is $1.72\times$ larger) --- and HH17 is decimated to HH20's element size
+(\texttt{forward\_compare\_hh.py}). Figure~\ref{fig:hhcmp} shows the two surfaces side by side under
+a shared diverging colour scale (red $=$ tension, blue $=$ compression) for three stress measures.
+
+\begin{figure}[ht]\centering
+  \includegraphics[width=\textwidth]{out/forward_hh_compare_trace.png}\\[3pt]
+  \includegraphics[width=\textwidth]{out/forward_hh_compare_sigma_max.png}\\[3pt]
+  \includegraphics[width=\textwidth]{out/forward_hh_compare_sigma_min.png}
+  \caption{Forward neo-Hookean inflation of HH17 (left) and HH20 (right) on a common scale,
+  $\Delta p=20$\,Pa, $\mu_s=5000$. Rows: $\mathrm{trace}\,\sigma$ (top), $\sigma_{\max}$ (middle),
+  $\sigma_{\min}$ (bottom); diverging colour map centred at $0$ (red tension, blue compression).
+  $\sigma_{\max}$ is tensile almost everywhere on both. $\sigma_{\min}$ exposes the difference: HH17
+  carries scattered \emph{compressive} (blue) patches through its more-folded body, whereas HH20 is
+  almost entirely tensile. On the common scale HH20's larger radius gives the higher mean tension
+  ($\mathrm{trace}$ median $8.26$ vs HH17's $7.59$).}
+  \label{fig:hhcmp}
+\end{figure}
+
+Two readings, depending on the normalisation. \textbf{Shape only} (each mesh scaled to its own unit
+radius): HH17 has the higher tension per unit size, because its tighter, thinner morphology means
+higher local curvature. \textbf{Size-corrected} (the common scale above): HH20 wins, because tension
+scales with radius through Young--Laplace and HH20 is $1.72\times$ larger --- consistent with the
+inverse-solve finding that membrane tension rises from HH17 to HH20. The other systematic difference
+is compression: HH17's folded body has many more $\sigma_{\min}<0$ regions (and correspondingly
+larger shape drift, ${\sim}13\%$ vs HH20's ${\sim}0.3\%$, as those regions wrinkle), while HH20 is
+nearly all-tensile. (Per-mesh stress fields are saved to \texttt{.vtp} so these views reload without
+re-solving.)
+
 %% =========================================================================
 \section{Software / packages}
 \label{sec:packages}
