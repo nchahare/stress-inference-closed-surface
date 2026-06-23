@@ -133,6 +133,9 @@ def main():
     ap.add_argument("--dp", type=float, default=20.0)
     ap.add_argument("--mu", type=float, default=500.0, help="surface shear modulus mu_s (N/m)")
     ap.add_argument("--R", type=float, default=1.0)
+    ap.add_argument("--show", action="store_true", help="open a vedo window of the result")
+    ap.add_argument("--field", default="trace",
+                    choices=["trace", "sigma1", "sigma2", "shear"])
     args = ap.parse_args()
 
     mesh = vedo.IcoSphere(r=args.R, subdivisions=args.subdiv)
@@ -166,6 +169,18 @@ def main():
     print(f"  isotropy |s1-s2|/s1 (mean) : {np.mean(np.abs(s1-s2)/np.abs(s1)):.2%}")
     print(f"  tension error vs Laplace   : "
           f"{abs(0.5*(s1.mean()+s2.mean()) - N_laplace)/N_laplace:.2%}")
+
+    if args.show:
+        fields = {"trace": s1 + s2, "sigma1": s1, "sigma2": s2, "shear": 0.5 * (s1 - s2)}
+        vals = fields[args.field]
+        dm = vedo.Mesh([x, faces])
+        dm.celldata[args.field] = vals
+        clim = (float(np.percentile(vals, 2)), float(np.percentile(vals, 98)))
+        dm.cmap("viridis", args.field, on="cells", vmin=clim[0], vmax=clim[1])
+        dm.add_scalarbar(title=f"{args.field} (N/m)")
+        txt = vedo.Text2D(f"Forward NH sphere  dp={args.dp}  mu_s={args.mu}  "
+                          f"lambda={lam:.4f}  |  {args.field}", pos="top-left")
+        vedo.show(dm, txt, axes=1, title="Forward neo-Hookean inflation").close()
 
 
 if __name__ == "__main__":
