@@ -286,7 +286,8 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
 - `sphere_curvature.py` — per-vertex curvature, normals, local axes (`compute_vertex_frames`).
 - `INSTALL.md` / `environment.yml` / `requirements.txt` — install + getting-started for new users
   (conda `fem_env` or pip; verify commands; gitignored data files). Deps: numpy/scipy/matplotlib/
-  vedo(+vtk); pymupdf/Pillow optional. scikit-fem is NOT imported by current scripts (legacy).
+  vedo(+vtk); pymupdf/Pillow optional. NOTE: despite the repo name, scikit-fem (and meshio) are NOT
+  imported by any script — the GFDM/FEM/forward solvers are hand-rolled scipy; both were dropped.
 - `curvature_compare.py` — mean curvature + normal arrows, sphere vs stretched.
 - `forward_neohookean.py` — **forward NH membrane inflation (M3)**: stress-free incompressible
   `W=µ_s(I+J⁻²−3)`, CST P1 membrane, energy-min L-BFGS + analytic gradient, follower pressure,

@@ -15,5 +15,3 @@ vedo @ git+https://github.com/marcomusy/vedo.git
 # --- optional ---
 pymupdf>=1.24        # cmsm_sphere_compare.py: crops cMSM Fig-15 out of the supplement PDF
 Pillow==10.4.0       # image montages (e.g. side-by-side comparisons)
-meshio==5.3.5        # extra mesh I/O formats via vedo
-scikit-fem==12.0.1   # legacy: present in the original env; current core scripts do not import it
