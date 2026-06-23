@@ -1,9 +1,19 @@
-# Python 3.11 (conda env `fem_env`). Pinned to the versions this project was developed on.
+# Python 3.11. Pinned to the versions this project was developed on (conda env `fem_env`).
+# Install into a fresh Python 3.11 environment:
+#     pip install -r requirements.txt
+# (git is required for the vedo line below.)
+
+# --- core (required by the membrane-stress, FEM and forward solvers + viewers) ---
 numpy==2.2.6
 scipy==1.14.1
-scikit-fem==12.0.1
-vtk==9.6.2
 matplotlib==3.10.9
-meshio==5.3.5
-# vedo: the project uses the git build (project_point_on_variety); PyPI >=2026.6.1 also exposes it.
+vtk==9.6.2
+# vedo: the curvature pipeline uses project_point_on_variety, present in the git build
+# (PyPI >= 2026.6.1 also exposes it). The git build is what the project was developed on.
 vedo @ git+https://github.com/marcomusy/vedo.git
+
+# --- optional ---
+pymupdf>=1.24        # cmsm_sphere_compare.py: crops cMSM Fig-15 out of the supplement PDF
+Pillow==10.4.0       # image montages (e.g. side-by-side comparisons)
+meshio==5.3.5        # extra mesh I/O formats via vedo
+scikit-fem==12.0.1   # legacy: present in the original env; current core scripts do not import it

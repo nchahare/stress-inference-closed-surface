@@ -1,0 +1,15 @@
+# Conda environment for the closed-surface stress-inference / forward-membrane code.
+#
+#   conda env create -f environment.yml      # (or: mamba env create -f environment.yml)
+#   conda activate fem_env
+#
+# Conda only provides Python 3.11 here; everything else is installed by pip from
+# requirements.txt so that vtk and the vedo git build resolve together without conflict.
+name: fem_env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - -r requirements.txt

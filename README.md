@@ -14,6 +14,22 @@ assumption, `scipy.sparse` only — which extends curved Monolayer Stress Micros
 The **sphere** is the analytic check (`K=1/R²`, `H=1/R`, `σ₁=σ₂=ΔpR/2t`); a **prolate
 spheroid** (stretched sphere) breaks the symmetry (`σ_hoop/σ_merid → 1.75` at the equator).
 
+## Installation
+
+See **[INSTALL.md](INSTALL.md)** for full instructions, verification, and the (optional)
+external data files. Quick start:
+
+```bash
+conda env create -f environment.yml      # creates the `fem_env` Python 3.11 env
+conda activate fem_env
+python forward_neohookean.py --shape sphere   # verify: prints "err 0.00%"
+```
+
+or with pip into a fresh Python 3.11 env: `pip install -r requirements.txt`.
+Dependencies are just `numpy` / `scipy` / `matplotlib` / `vedo` (+`vtk`); `pymupdf` and
+`Pillow` are optional. The analytic shapes (sphere / prolate / oblate / capsule) need no
+external data; the embryo `.vtk` meshes and the cMSM reference are gitignored (see INSTALL.md).
+
 ## Data & external references (not committed)
 
 To keep the repo source-only, the following are **gitignored** — obtain them separately:
