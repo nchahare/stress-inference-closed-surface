@@ -432,6 +432,60 @@ beneficial and never destroys real signal (cMSM flag the sphere as "special" for
 Calibrate λ on the **spheroid** instead (`fem_regularization_study.py`), where genuine anisotropy
 makes over-smoothing costly so the corner ≈ min-error ≈ **0.05**.
 
+### 12. Forward neo-Hookean inflation — the M3 ground truth (`forward_membrane`)
+
+The inverse solve is statically indeterminate on a closed surface (the null modes / "lines"), so
+there is no exact reference stress on a general shape. The **forward** problem fixes that: inflate a
+stress-free reference surface under internal pressure with a hyperelastic membrane and read off the
+stress. Because the elastic energy is convex, the solution is **unique** — the constitutive law picks
+the one physical member of the indeterminate family — so it is a clean, null-mode-free ground truth,
+available on *arbitrary* shapes (the embryo). See `forward_membrane.tex`/`.pdf` for the full
+derivation.
+
+**Method.** Minimise the total potential energy `Π = Σ_T A0·W(I,J) − Δp·V(x)` over the deformed nodal
+positions, with a P1 constant-strain-triangle (CST) membrane, the **stress-free incompressible
+neo-Hookean** energy `W = µ_s(I + J⁻² − 3)`, and a follower pressure load. Solved with **L-BFGS +
+analytic gradient** (no Hessian/jax needed); the free-floating closed body's 6 rigid-body modes are
+flat directions, so no pinning is required. Principal resultants `σ₁,σ₂ = eig[(1/J)F S Fᵀ]`.
+**Stiff-reference trick:** take the target shape as the stress-free reference and use a *stiff* `µ_s`
+so it barely deforms (`drift` ≪ 1) — then the stress is the equilibrium tension *on that shape*.
+
+```powershell
+# analytic shapes (built-in), with validation against the closed form
+& $py forward_neohookean.py --shape sphere     # also prolate / oblate / capsule
+& $py forward_neohookean.py --shape prolate --show --field sigma_max
+#   flags: --shape --subdiv --dp --mu --field --vmin --vmax --save <png> --show
+
+# arbitrary closed mesh (the HH20 embryo); auto-cleans, normalises, orients
+& $py forward_neohookean.py --mesh 2025-10-23-13-06-HH20.vtk --field trace --vmin 0 --vmax 12 --show
+& $py forward_neohookean.py --mesh 2025-09-18-16-46-HH17.vtk --decimate 3766 --mu 5000 --show
+
+# saddle test: does the K<0 peanut neck go compressive? (no -- stays tensile)
+& $py forward_saddle_demo.py --d 0.9 --show
+
+# HH17 vs HH20 on a COMMON scale, 2-panel, diverging colorbar; saves .vtp for re-viewing
+& $py forward_compare_hh.py --show              # solve + save out/forward_{HH17,HH20}.vtp
+& $py forward_compare_hh.py --load --show       # re-view instantly from saved .vtp (no re-solve)
+#   flags: --dp --mu --decimate --maxiter --field --outdir --load --show
+```
+
+**Validation** (subdiv-4, Δp=20, µ_s=500) — **~10× tighter than the inverse solve**: sphere stretch
+matches the analytic NH-sphere law to **0.00%**, isotropy 0.37%; prolate equator anisotropy **1.744**
+vs analytic 1.749 (belt err 0.36%); capsule hoop/axial recovered to **0.2%**.
+
+**Two physics findings.** (i) The **oblate** equator's analytic hoop is *compressive* (−19.7); a
+membrane has no bending stiffness, so it **wrinkles** (σ_min → 0, drift ↑) — cMSM's `det σ > 0`
+territory, which we do *not* impose (we just want the pattern). (ii) The **peanut neck** (negative
+Gaussian curvature, a saddle) stays **tensile** under internal pressure ⇒ **K < 0 does not force
+compression**; the convex oblate (r₂ > 2r₁) does. The sign of the stress is set by the Young–Laplace
+balance + global equilibrium, not by the sign of `K`.
+
+**HH17 vs HH20** (`forward_compare_hh.py`, common scale, Δp=20, µ_s=5000): HH20 is **1.72× larger**, so
+its trace median is **8.26 > HH17's 7.59** (size → higher Laplace tension), matching the inverse-solve
+HH17→HH20 rise; HH17 carries more compressive patches and drifts ~13% (more folded → more wrinkling).
+Normalising *each* mesh to unit radius gives the shape-only view (HH17 higher); a *common* scale gives
+the size-corrected view (HH20 higher).
+
 ### 6. Final-results simulations (method comparison: Local vs cMSM vs FEM)
 
 The "final results" follow a 12-sim matrix: **2 geometries** (sphere, prolate ellipsoid 2:1)
@@ -477,6 +531,7 @@ Discretization:
 Last updated: **2026-06-20 (UTC-04:00)**
 
 ### Done
+- [x] **Forward neo-Hookean inflation (M3) implemented** (`forward_neohookean.py`, `forward_membrane.tex`/`.pdf`) — energy-min L-BFGS CST membrane, stress-free incompressible NH, follower pressure, free-floating closed body; unique null-mode-free ground truth, validated **~10× tighter than the inverse solve** (sphere stretch 0.00% / iso 0.37%, prolate anisotropy 1.744 vs 1.749, capsule hoop/axial 0.2%). Runs arbitrary closed meshes (`--mesh`, `--decimate`): HH20 + decimated HH17. Findings: oblate compressive hoop → membrane wrinkles; peanut **K<0 neck stays tensile** (K<0 ≠ compression). HH17→HH20 size-corrected tension rises (matches inverse). `forward_compare_hh.py` saves `.vtp` + `--load` re-view without re-solving — _2026-06-22_
 - [x] **Laplacian post-smoothing dropped for the FEM** (`fem_smoothing_sweep.py`, `tension_inference` §12 `sec:fem-smoothing`) — joint λ×iters sweep on sphere/prolate/oblate/capsule shows the error minimum is at **zero smoothing iterations** on every shape with genuine stress variation (prolate 2.47%, oblate 6.72%, capsule 2.19%); only the sphere benefits (constant field, no real signal to damage). FEM now regularized by a single Tikhonov λ at the L-curve corner. Per-shape cMSM-Fig-15 figures + per-vertex NPZ saved for 3D plotting — _2026-06-20_
 - [x] **cMSM Fig-15 L-curve reproduced** (`cmsm_sphere_compare.py` closed sphere + `fem_regularization_study.py` spheroid) — our FEM λ-sweep gives the same U-shaped error + L-curve corner as cMSM's Supplementary Fig. 15; optimum **2.6%** (full σ) vs their <1% (closed-surface penalty). KEY: the sphere is a bad λ-calibration target (corner λ≈0.1 ≠ min-error λ≈0.5, since smoothing a constant field always helps) — tune λ on the spheroid (corner ≈ min-error ≈ 0.05). Comparison auto-crops cMSM's panels from the supplement PDF — _2026-06-20_
 - [x] **Stress-based FEM IMPLEMENTED + validated** (`membrane_stress_fem.py`, `tension_inference` **§12**) — primal virtual-work (cMSM-style) weak form `∫ N:ε_s(w)=∫ Δp·n·w`, hand-rolled `scipy.sparse`, P1 nodal local-frame DOFs (square 3n system); element assembly + consistent load; singular-system solve = raw min-norm `lsqr` then Tikhonov with a **FEM-native 1-ring roughness** (Frobenius-matched so λ=0.05 matches GFDM); auto-iterative `lsqr` above 20k DOFs. **Findings:** raw FEM shows the same "lines" as GFDM ⇒ artefact is intrinsic to the indeterminacy, not a GFDM stencil effect (cMSM singular on closed surfaces); regularised FEM ≥ GFDM accuracy (sphere dev-std 4.4 vs 6.5, spheroid σ_max 1.7% vs 3.6%); **~5–12× faster** (subdiv-4 2.0 vs 10.3 s, subdiv-5 9.2 vs 110 s) — KᵀK is 6.6× sparser (57 vs 376 nnz/row) — _2026-06-18_
@@ -583,6 +638,10 @@ M1+M2 on **HH17 (decimated to HH20's 3766 pts) + HH20** for the real-mesh compar
 - `fem_regularization_study.py` — cMSM-Fig-15-style λ-sweep on the prolate **spheroid** (genuine anisotropy → real optimum ≈0.05): trace-vs-full-σ error, residual, L-curve + 3D trace(σ) glyph with inferred-vs-analytic crosses → `out/fem_regularization.png`
 - `fem_smoothing_sweep.py` — joint **λ × Laplacian-iters** sweep on sphere/prolate/oblate/capsule; cMSM-Fig-15 layout per shape (error, σ₁-vs-coordinate, residual, L-curve), colored by iters; smooths the DOFs and recomputes residual/roughness → `out/fem_smoothing_sweep_<shape>.png` + per-vertex `.npz`. Shows m=0 (no smoothing) is optimal except on the sphere ⇒ FEM uses Tikhonov-λ alone
 - `export_fem_vtk.py` — solve the FEM on sphere/prolate/oblate/capsule and write `out/fem_vtk/fem_<shape>.vtp` (ParaView) with per-vertex σ₁/σ₂, σ_max/σ_min, trace/mean/vonmises/shear, resultants N1/N2, direction vectors d₁/d₂, normal, and analytic σ_max/σ_min/trace + belt_mask. Reuses `build_mesh`/`analytic_coord_mask` from `fem_smoothing_sweep`. Flags: `--shapes --subdiv --dp --t --lam --outdir`
+- `forward_neohookean.py` — **forward neo-Hookean membrane inflation (M3)**: CST P1 membrane, stress-free incompressible `W=µ_s(I+J⁻²−3)`, energy-min L-BFGS + analytic gradient, follower pressure, free-floating closed body. `--shape` (analytic validation) or `--mesh`/`--decimate` (arbitrary closed meshes, e.g. HH20). Flags: `--shape --subdiv --dp --mu --field --vmin --vmax --save --show`
+- `forward_saddle_demo.py` — peanut/dumbbell (negative-Gaussian-curvature neck) inflation; correlates σ_min with the sign of `K` → shows the K<0 saddle stays tensile under internal pressure
+- `forward_compare_hh.py` — HH17 (decimated) vs HH20 forward solve on a **common scale**, 2-panel side-by-side with a diverging tension/compression colorbar; saves per-mesh `out/forward_<tag>.vtp` (all σ fields on the deformed mesh) and reloads them with `--load` (no re-solve). Flags: `--dp --mu --decimate --maxiter --field --outdir --load --show`
+- `forward_membrane.tex` / `.pdf` — forward-problem derivation: kinematics, membrane neo-Hookean, energy/weak form + follower pressure, CST FE, free-floating BCs, solver, Results (4 shapes + peanut + HH20), package recommendation
 - `stress_smoothing_compare.py` — Laplacian smoothing of σ; raw vs smoothed vs mean
 - `membrane_stress_beltrami.py` — Beltrami/Airy stress-function solve (single scalar Φ)
 - `reg_compare.py` — cMSM-style (grad-trace + curl) regularization vs our Laplacian smoothing

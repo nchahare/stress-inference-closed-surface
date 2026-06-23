@@ -16,6 +16,7 @@ Run:
 from __future__ import annotations
 
 import argparse
+import os
 import numpy as np
 from scipy.optimize import minimize
 import vedo
@@ -23,6 +24,22 @@ import vedo
 from forward_neohookean import reference_geometry, energy_and_grad, recover_stress
 
 HH17, HH20 = "2025-09-18-16-46-HH17.vtk", "2025-10-23-13-06-HH20.vtk"
+FIELDS = ["trace", "sigma_max", "sigma_min", "sigma1", "sigma2", "shear"]
+
+
+def all_fields(s1, s2):
+    """All per-triangle stress scalars from the two principal resultants."""
+    smax, smin = np.maximum(s1, s2), np.minimum(s1, s2)
+    return {"sigma1": s1, "sigma2": s2, "sigma_max": smax, "sigma_min": smin,
+            "trace": s1 + s2, "shear": 0.5 * (smax - smin)}
+
+
+def panel_mesh(x, F, s1, s2):
+    """Deformed mesh carrying every stress field as cell data (for save / colour)."""
+    m = vedo.Mesh([x, F])
+    for k, v in all_fields(s1, s2).items():
+        m.celldata[k] = v
+    return m
 
 
 def load_common(path, L, decimate=None):
@@ -61,44 +78,59 @@ def main():
     ap.add_argument("--mu", type=float, default=5000.0)
     ap.add_argument("--decimate", type=int, default=3766)
     ap.add_argument("--maxiter", type=int, default=15000)
-    ap.add_argument("--field", default="trace", choices=["trace", "sigma_max", "sigma_min"])
+    ap.add_argument("--field", default="trace", choices=FIELDS)
+    ap.add_argument("--outdir", default="out")
+    ap.add_argument("--load", action="store_true",
+                    help="skip the solve and reload saved out/forward_<tag>.vtp")
     ap.add_argument("--show", action="store_true")
     args = ap.parse_args()
-
-    # common scale = mean of the two raw mean-radii (keeps both O(1), preserves relative size)
-    R = {}
-    for tag, f in [("HH17", HH17), ("HH20", HH20)]:
-        Xc = vedo.load(f).coordinates.astype(float)
-        R[tag] = np.linalg.norm(Xc - Xc.mean(0), axis=1).mean()
-    L = 0.5 * (R["HH17"] + R["HH20"])
-    print(f"raw mean radii: HH17 {R['HH17']:.1f}  HH20 {R['HH20']:.1f}  (HH20/HH17={R['HH20']/R['HH17']:.2f})")
-    print(f"common scale L = {L:.1f}  -> normalised radii HH17 {R['HH17']/L:.3f}  HH20 {R['HH20']/L:.3f}")
+    os.makedirs(args.outdir, exist_ok=True)
 
     panels = []
-    for tag, f, dec in [("HH17", HH17, args.decimate), ("HH20", HH20, None)]:
-        X, F = load_common(f, L, decimate=dec)
-        x, s1, s2, drift = solve(X, F, args.mu, args.dp, args.maxiter)
-        fld = {"trace": s1 + s2, "sigma_max": np.maximum(s1, s2),
-               "sigma_min": np.minimum(s1, s2)}[args.field]
-        print(f"{tag}: n={len(X)}  drift={drift:.2e}  {args.field} "
-              f"median {np.median(fld):.3f}  [{np.percentile(fld,2):.2f}, {np.percentile(fld,98):.2f}]")
-        panels.append((tag, vedo.Mesh([x, F]), fld))
+    if args.load:                                   # reuse saved results -- no solving
+        for tag in ("HH17", "HH20"):
+            path = os.path.join(args.outdir, f"forward_{tag}.vtp")
+            m = vedo.load(path)
+            print(f"loaded {path}  ({m.ncells} tris, fields: {list(m.celldata.keys())})")
+            panels.append((tag, m))
+    else:
+        # common scale = mean of the two raw mean-radii (keeps both O(1), preserves relative size)
+        R = {}
+        for tag, f in [("HH17", HH17), ("HH20", HH20)]:
+            Xc = vedo.load(f).coordinates.astype(float)
+            R[tag] = np.linalg.norm(Xc - Xc.mean(0), axis=1).mean()
+        L = 0.5 * (R["HH17"] + R["HH20"])
+        print(f"raw mean radii: HH17 {R['HH17']:.1f}  HH20 {R['HH20']:.1f}  "
+              f"(HH20/HH17={R['HH20']/R['HH17']:.2f}); common scale L={L:.1f}")
+        for tag, f, dec in [("HH17", HH17, args.decimate), ("HH20", HH20, None)]:
+            X, F = load_common(f, L, decimate=dec)
+            x, s1, s2, drift = solve(X, F, args.mu, args.dp, args.maxiter)
+            tr = s1 + s2
+            print(f"{tag}: n={len(X)}  drift={drift:.2e}  trace median {np.median(tr):.3f}  "
+                  f"[{np.percentile(tr,2):.2f}, {np.percentile(tr,98):.2f}]")
+            m = panel_mesh(x, F, s1, s2)
+            path = os.path.join(args.outdir, f"forward_{tag}.vtp")
+            m.write(path)
+            print(f"  saved {path}")
+            panels.append((tag, m))
 
-    allv = np.concatenate([p[2] for p in panels])
+    render(panels, args.field, args.show, args.outdir)
+
+
+def render(panels, field, show, outdir):
+    allv = np.concatenate([p[1].celldata[field] for p in panels])
     lim = float(min(np.percentile(np.abs(allv), 97), 15.0))      # symmetric, spike-robust
-    print(f"shared diverging colour scale: [-{lim:.2f}, {lim:.2f}] (coolwarm, 0 = white)")
-
-    plt = vedo.Plotter(N=2, size=(1700, 850), sharecam=False, offscreen=not args.show,
+    print(f"shared diverging colour scale ({field}): [-{lim:.2f}, {lim:.2f}] (coolwarm, 0=white)")
+    plt = vedo.Plotter(N=2, size=(1700, 850), sharecam=False, offscreen=not show,
                        title="Forward NH: HH17 vs HH20 (common scale)")
-    for k, (tag, m, fld) in enumerate(panels):
-        m.celldata[args.field] = fld
-        m.cmap("coolwarm", args.field, on="cells", vmin=-lim, vmax=lim)
-        m.add_scalarbar(title=f"{args.field} (N/m)")
-        plt.at(k).show(m, vedo.Text2D(f"{tag}  |  {args.field}", pos="top-left"),
+    for k, (tag, m) in enumerate(panels):
+        m.cmap("coolwarm", field, on="cells", vmin=-lim, vmax=lim)
+        m.add_scalarbar(title=f"{field} (N/m)")
+        plt.at(k).show(m, vedo.Text2D(f"{tag}  |  {field}", pos="top-left"),
                        axes=1, azimuth=30, elevation=15)
-    plt.screenshot("out/forward_hh_compare.png")
-    print("saved out/forward_hh_compare.png")
-    if args.show:
+    out = os.path.join(outdir, "forward_hh_compare.png")
+    plt.screenshot(out); print(f"saved {out}")
+    if show:
         plt.interactive()
     plt.close()
 

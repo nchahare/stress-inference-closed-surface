@@ -259,10 +259,46 @@ pts = mesh.coordinates ; normals = mesh.vertex_normals
   CONSERVATIVE on closed surfaces (residual lifts off before min-error, so auto-λ ~1e-2 < error-optimal
   ~1e-1) → favors equilibrium fidelity + sharp σ_max over σ_min; override with explicit λ if needed.
   (Menger curvature + the (resid,reg) 2D elbow were tried and rejected: too low / endpoint-sensitive.)
+- **Forward neo-Hookean membrane = M3, IMPLEMENTED (`forward_neohookean.py`, `forward_membrane.tex`).**
+  Inflates a stress-free reference surface under internal pressure → a UNIQUE, null-mode-free stress
+  field (the constitutive law picks one member of the self-equilibrated family that makes the INVERSE
+  ill-posed). Energy `Π=Σ A0·W − Δp·V` minimised by **L-BFGS + analytic gradient** (CST P1 membrane,
+  follower pressure, free-floating closed body — 6 rigid modes are flat, no pinning); σ=(1/J)F S Fᵀ →
+  σ1,σ2. **Model = stress-free INCOMPRESSIBLE NH `W=µ_s(I+J⁻²−3)`, NOT cMSM's compressible
+  µ(I−2)+λ(J−1)²** — the latter has a reference pre-tension 2µ that breaks the stiff-reference trick.
+  **Stiff-reference strategy:** target shape as stress-free ref + stiff µ_s → small deformation
+  (`drift`=max‖x−X‖/mean‖X‖), so σ is the equilibrium tension ON the (≈unchanged) shape. **Validated
+  ~10× tighter than the inverse solve:** sphere (stretch 0.00%, isotropy 0.37%), prolate (anisotropy
+  1.744 vs 1.749, belt err 0.36%), capsule (hoop/axial 0.2%). **Oblate:** analytic σ_min compressive
+  (−19.7) → a membrane WRINKLES (no bending) → σ_min→0, drift↑; this is cMSM's det σ>0 territory but we
+  DON'T impose it (just want the pattern). **Peanut neck (`forward_saddle_demo.py`): K<0 saddle stays
+  TENSILE under internal pressure** ⇒ negative Gaussian curvature does NOT force compression; the OBLATE
+  (K>0, r2>2r1) does. Sign of σ is set by Young-Laplace + global balance, not by sign(K). `--mesh <file>`
+  runs arbitrary closed meshes (drops degenerate tris, normalizes to unit radius → pattern is
+  scale-invariant, orients faces outward); `--decimate N` coarsens (HH17 64k→3766 to match HH20).
+  **HH17 vs HH20 (`forward_compare_hh.py`, common scale):** HH20 trace median 8.26 > HH17 7.59 (size
+  effect, HH20 1.72× bigger → higher Laplace tension; matches inverse HH17→HH20 rise); HH17 has more
+  compressive patches + drifts ~13% (wrinkles, more folded). Normalize EACH to unit radius = shape-only
+  (HH17 higher); common scale = size-corrected (HH20 higher). Saves per-mesh `.vtp` (all σ fields on the
+  deformed mesh) + `--load` to re-view without re-solving.
 
 ## Files
 - `sphere_curvature.py` — per-vertex curvature, normals, local axes (`compute_vertex_frames`).
 - `curvature_compare.py` — mean curvature + normal arrows, sphere vs stretched.
+- `forward_neohookean.py` — **forward NH membrane inflation (M3)**: stress-free incompressible
+  `W=µ_s(I+J⁻²−3)`, CST P1 membrane, energy-min L-BFGS + analytic gradient, follower pressure,
+  free-floating closed body. `--shape sphere|prolate|oblate|capsule` (analytic validation) or
+  `--mesh <file>` (+`--decimate N`) for arbitrary closed meshes (HH20). `--mu`(stiffness) `--dp`
+  `--field` `--vmin/--vmax` `--save`(offscreen PNG) `--show`. Reusable: `reference_geometry`,
+  `energy_and_grad`, `recover_stress`, `load_normalized_mesh`.
+- `forward_saddle_demo.py` — peanut/dumbbell (K<0 neck) inflation; correlates σ_min with Gaussian
+  curvature → shows K<0 stays tensile (no compression under internal pressure).
+- `forward_compare_hh.py` — HH17(decimated)+HH20 forward solve on a COMMON scale, 2-panel
+  side-by-side with a diverging colorbar (red tension / blue compression). Saves per-mesh `.vtp`
+  (all σ fields on the deformed mesh); `--load` re-views without re-solving. `--field --mu --maxiter`.
+- `forward_membrane.tex`/`.pdf` — forward-problem derivation: kinematics, membrane NH constitutive,
+  energy/weak form + follower pressure (pressure vs volume control), CST FE, free-floating BCs
+  (3-2-1 / rigid-mode projection), Newton/L-BFGS, Results (4 shapes + peanut + HH20), packages.
 - `surface_fd.py` — GFDM surface-derivative operators + self-test.
 - `membrane_stress_fd.py` — direct GFDM membrane-stress solve (σ₁, σ₂); arbitrary fit frame.
 - `membrane_stress_fem.py` — **stress-based FEM** (§12): primal virtual-work, P1 nodal local-frame
